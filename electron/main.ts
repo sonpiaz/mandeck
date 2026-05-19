@@ -46,7 +46,9 @@ function createWindow() {
 
   if (isDev) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL!);
-    if (seq === 1) win.webContents.openDevTools({ mode: "detach" });
+    if (seq === 1 && process.env.MANDECK_DEVTOOLS === "1") {
+      win.webContents.openDevTools({ mode: "detach" });
+    }
   } else {
     win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
