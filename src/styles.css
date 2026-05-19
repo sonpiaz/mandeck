@@ -49,7 +49,6 @@ body {
   user-select: none;
   overflow-x: auto;
   overflow-y: hidden;
-  -webkit-app-region: no-drag;
 }
 .tabbar::-webkit-scrollbar { display: none; }
 
@@ -155,12 +154,22 @@ body {
   flex-direction: column;
 }
 .pane.maximized {
-  position: fixed;
-  top: 44px;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: fixed !important;
+  top: 44px !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  transform: none !important;
   z-index: 50;
+}
+/* Allotment applies transform to .split-view-view (which establishes a
+   containing block for position:fixed children, trapping the maximized
+   pane). Neutralize it on the branch that holds the maximized pane. */
+.split-view-view:has(.pane.maximized),
+.allotment-module_splitViewView__MGZ6O:has(.pane.maximized) {
+  transform: none !important;
 }
 .pane-maximize-backdrop {
   position: fixed;
