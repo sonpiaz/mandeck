@@ -352,7 +352,11 @@ export function Terminal({
               end: { x: endCol, y: endRow },
             },
             text: m[0],
-            activate: (_e, url) => {
+            activate: (e, url) => {
+              // Match macOS terminal convention: only open on ⌘+click
+              // (or Ctrl+click elsewhere). A plain click should not yank
+              // the user out into a browser by accident.
+              if (!e.metaKey && !e.ctrlKey) return;
               window.mandeck.openExternal(url).catch(() => {});
             },
             hover: (_e, url) => {
