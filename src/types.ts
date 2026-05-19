@@ -6,6 +6,7 @@ export type Tab = {
   autoNamed: boolean;
   cols: Col[];
   focusedPaneId: string;
+  maximizedPaneId: string | null;
 };
 
 export type AppState = {

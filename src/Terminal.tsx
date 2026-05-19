@@ -10,17 +10,33 @@ declare global {
 type Props = {
   id: string;
   focused: boolean;
+  maximized: boolean;
   onFocus: () => void;
+  onClose: () => void;
+  onToggleMaximize: () => void;
 };
+
+const HOST_LABEL = (() => {
+  const { user, host } = window.mandeck.hostInfo;
+  return `${user}@${host}`;
+})();
 
 const URL_RE = /https?:\/\/[^\s<>"'`)\]]+/g;
 
-export function Terminal({ id, focused, onFocus }: Props) {
+export function Terminal({
+  id,
+  focused,
+  maximized,
+  onFocus,
+  onClose,
+  onToggleMaximize,
+}: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const hoveredUrlRef = useRef<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [title, setTitle] = useState(HOST_LABEL);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -95,6 +111,11 @@ export function Terminal({ id, focused, onFocus }: Props) {
       try { fit.fit(); } catch { /* not ready */ }
     });
     ro.observe(host);
+
+    const titleDisp = term.onTitleChange((t) => {
+      const trimmed = t.trim();
+      if (trimmed) setTitle(trimmed);
+    });
 
     const mouseDown = () => {
       onFocus();
@@ -220,6 +241,7 @@ export function Terminal({ id, focused, onFocus }: Props) {
       host.removeEventListener("dragover", onDragOver);
       host.removeEventListener("dragleave", onDragLeave);
       host.removeEventListener("drop", onDrop);
+      titleDisp.dispose();
       linkProvider.dispose();
       offPaste();
       inputDisp.dispose();
@@ -240,13 +262,48 @@ export function Terminal({ id, focused, onFocus }: Props) {
     }
   }, [focused]);
 
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      try { fitRef.current?.fit(); } catch { /* noop */ }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [maximized]);
+
   const classes = ["pane"];
   if (focused) classes.push("focused");
   if (dragOver) classes.push("drag-over");
+  if (maximized) classes.push("maximized");
+
+  const handleHeaderMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest(".pane-btn")) return;
+    onFocus();
+  };
 
   return (
     <div className={classes.join(" ")}>
-      <div ref={hostRef} className="xterm-container" />
+      <div className="pane-header" onMouseDown={handleHeaderMouseDown}>
+        <span className="pane-header-icon" aria-hidden>▢</span>
+        <span className="pane-header-title" title={title}>{title}</span>
+        <button
+          className="pane-btn"
+          aria-label={maximized ? "Restore pane" : "Maximize pane"}
+          title={maximized ? "Restore" : "Maximize"}
+          onClick={onToggleMaximize}
+        >
+          {maximized ? "⛶" : "⤢"}
+        </button>
+        <button
+          className="pane-btn"
+          aria-label="Close pane"
+          title="Close"
+          onClick={onClose}
+        >
+          ✕
+        </button>
+      </div>
+      <div className="pane-body">
+        <div ref={hostRef} className="xterm-container" />
+      </div>
     </div>
   );
 }

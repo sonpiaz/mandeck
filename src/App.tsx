@@ -21,6 +21,7 @@ const makeTab = (): Tab => {
     autoNamed: true,
     cols: [{ cid: newCid(), panes: [pid] }],
     focusedPaneId: pid,
+    maximizedPaneId: null,
   };
 };
 
@@ -47,19 +48,25 @@ function addPaneToTab(tab: Tab): Tab {
       i === targetIdx ? { ...c, panes: [...c.panes, pid] } : c
     );
   }
-  return { ...tab, cols: nextCols, focusedPaneId: pid };
+  return { ...tab, cols: nextCols, focusedPaneId: pid, maximizedPaneId: null };
 }
 
-function closePaneInTab(tab: Tab): Tab | null {
+function closePaneInTab(tab: Tab, targetPid?: string): Tab | null {
+  const victim = targetPid ?? tab.focusedPaneId;
   const nextCols: Col[] = [];
   for (const c of tab.cols) {
-    const remaining = c.panes.filter((p) => p !== tab.focusedPaneId);
+    const remaining = c.panes.filter((p) => p !== victim);
     if (remaining.length > 0) nextCols.push({ ...c, panes: remaining });
   }
   const flat = nextCols.flatMap((c) => c.panes);
   if (flat.length === 0) return null; // tab becomes empty
   const newest = flat.reduce((a, b) => (paneAge(b) > paneAge(a) ? b : a));
-  return { ...tab, cols: nextCols, focusedPaneId: newest };
+  return {
+    ...tab,
+    cols: nextCols,
+    focusedPaneId: tab.focusedPaneId === victim ? newest : tab.focusedPaneId,
+    maximizedPaneId: tab.maximizedPaneId === victim ? null : tab.maximizedPaneId,
+  };
 }
 
 export function App() {
@@ -97,11 +104,11 @@ export function App() {
     });
   };
 
-  const closePane = () => {
+  const closePaneById = (targetPid?: string) => {
     setState((s) => {
       const tab = s.tabs.find((t) => t.tid === s.activeTabId);
       if (!tab) return s;
-      const next = closePaneInTab(tab);
+      const next = closePaneInTab(tab, targetPid);
       if (next === null) {
         // tab empty → cascade close
         if (s.tabs.length === 1) {
@@ -120,6 +127,16 @@ export function App() {
         tabs: s.tabs.map((t) => (t.tid === s.activeTabId ? next : t)),
       };
     });
+  };
+
+  const closePane = () => closePaneById();
+
+  const toggleMaximize = (pid: string) => {
+    updateActiveTab((t) => ({
+      ...t,
+      maximizedPaneId: t.maximizedPaneId === pid ? null : pid,
+      focusedPaneId: pid,
+    }));
   };
 
   const switchTab = (tid: string) =>
@@ -224,8 +241,11 @@ export function App() {
             tid={tab.tid}
             cols={tab.cols}
             focusedPaneId={tab.focusedPaneId}
+            maximizedPaneId={tab.maximizedPaneId}
             active={tab.tid === state.activeTabId}
             onFocusPane={focusPane}
+            onClosePane={closePaneById}
+            onToggleMaximize={toggleMaximize}
           />
         ))}
       </div>

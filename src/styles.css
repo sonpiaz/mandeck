@@ -144,6 +144,16 @@ body {
   background: var(--bg-pane);
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.pane.maximized {
+  position: fixed;
+  top: 68px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
 }
 .pane.focused::after {
   content: "";
@@ -161,6 +171,60 @@ body {
   background: rgba(47, 129, 247, 0.08);
   box-shadow: inset 0 0 0 2px var(--accent);
   z-index: 11;
+}
+
+.pane-header {
+  flex: 0 0 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 10px;
+  background: #11161d;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11.5px;
+  user-select: none;
+  cursor: default;
+}
+.pane.focused .pane-header {
+  background: #161c25;
+  color: var(--text);
+}
+.pane-header-icon {
+  flex: 0 0 auto;
+  opacity: 0.65;
+  font-size: 11px;
+  line-height: 1;
+}
+.pane-header-title {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pane-btn {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1;
+}
+.pane-btn:hover { background: var(--border); color: var(--text); }
+
+.pane-body {
+  flex: 1 1 auto;
+  position: relative;
+  overflow: hidden;
 }
 
 .xterm-container {

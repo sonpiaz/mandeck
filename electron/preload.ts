@@ -1,4 +1,10 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+import os from "node:os";
+
+const hostInfo = {
+  user: os.userInfo().username,
+  host: os.hostname(),
+};
 
 type MenuChannel =
   | "menu:new-pane"
@@ -38,6 +44,7 @@ const api = {
     return () => ipcRenderer.removeListener(channel, listener);
   },
 
+  hostInfo,
   getPathForFile: (file: File): string => {
     try { return webUtils.getPathForFile(file); } catch { return ""; }
   },

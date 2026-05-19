@@ -7,11 +7,23 @@ type Props = {
   tid: string;
   cols: Col[];
   focusedPaneId: string;
+  maximizedPaneId: string | null;
   active: boolean;
   onFocusPane: (pid: string) => void;
+  onClosePane: (pid: string) => void;
+  onToggleMaximize: (pid: string) => void;
 };
 
-export function Workspace({ tid, cols, focusedPaneId, active, onFocusPane }: Props) {
+export function Workspace({
+  tid,
+  cols,
+  focusedPaneId,
+  maximizedPaneId,
+  active,
+  onFocusPane,
+  onClosePane,
+  onToggleMaximize,
+}: Props) {
   const outerRef = useRef<AllotmentHandle>(null);
   const innerRefs = useRef<Map<string, AllotmentHandle | null>>(new Map());
 
@@ -24,7 +36,7 @@ export function Workspace({ tid, cols, focusedPaneId, active, onFocusPane }: Pro
       innerRefs.current.forEach((ref) => ref?.reset());
     });
     return () => cancelAnimationFrame(raf);
-  }, [cols.length, totalPanes, active]);
+  }, [cols.length, totalPanes, active, maximizedPaneId]);
 
   return (
     <div
@@ -47,7 +59,10 @@ export function Workspace({ tid, cols, focusedPaneId, active, onFocusPane }: Pro
                   <Terminal
                     id={pid}
                     focused={active && pid === focusedPaneId}
+                    maximized={pid === maximizedPaneId}
                     onFocus={() => onFocusPane(pid)}
+                    onClose={() => onClosePane(pid)}
+                    onToggleMaximize={() => onToggleMaximize(pid)}
                   />
                 </Allotment.Pane>
               ))}
