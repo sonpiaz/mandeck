@@ -1,1 +1,0 @@
-{"root":["./src/app.tsx","./src/tabbar.tsx","./src/terminal.tsx","./src/workspace.tsx","./src/main.tsx","./src/types.ts","./electron/main.ts","./electron/preload.ts"],"version":"5.9.3"}
