@@ -192,9 +192,16 @@ export function Terminal({ id, focused, onFocus }: Props) {
       setDragOver(false);
       const files = Array.from(e.dataTransfer.files);
       const paths = files
-        .map((f) => (f as File & { path?: string }).path)
+        .map((f) => {
+          const legacy = (f as File & { path?: string }).path;
+          if (typeof legacy === "string" && legacy.length > 0) return legacy;
+          return window.mandeck.getPathForFile(f);
+        })
         .filter((p): p is string => typeof p === "string" && p.length > 0);
-      if (paths.length === 0) return;
+      if (paths.length === 0) {
+        console.warn("[mandeck] drop: no filesystem path for", files.map((f) => f.name));
+        return;
+      }
       onFocus();
       term.focus();
       const text = paths.map(shellQuote).join(" ");

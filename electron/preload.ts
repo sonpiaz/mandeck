@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 type MenuChannel =
   | "menu:new-pane"
@@ -38,6 +38,9 @@ const api = {
     return () => ipcRenderer.removeListener(channel, listener);
   },
 
+  getPathForFile: (file: File): string => {
+    try { return webUtils.getPathForFile(file); } catch { return ""; }
+  },
   openExternal: (url: string): Promise<boolean> =>
     ipcRenderer.invoke("shell:openExternal", url),
   readClipboardText: (): Promise<string> =>
