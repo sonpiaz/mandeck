@@ -25,7 +25,14 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": [{ "target": "dir", "arch": ["arm64"] }],
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false
@@ -39,6 +46,8 @@
     "allotment": "^1.20.2",
     "node-pty": "^1.0.0",
     "react": "^18.3.1",
+    "react-dnd": "^16.0.1",
+    "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {

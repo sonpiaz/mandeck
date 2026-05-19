@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal as XTerm, type ILink } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { useDrag, useDrop } from "react-dnd";
+import { getEmptyImage } from "react-dnd-html5-backend";
+import { PANE_DND_TYPE, type Edge, type PaneDragItem } from "./types";
 import type { MandeckApi } from "../electron/preload";
 
 declare global {
@@ -14,7 +17,22 @@ type Props = {
   onFocus: () => void;
   onClose: () => void;
   onToggleMaximize: () => void;
+  onMovePane: (src: string, target: string, edge: Edge) => void;
 };
+
+function edgeFromOffset(
+  x: number,
+  y: number,
+  w: number,
+  h: number
+): Edge {
+  const nx = x / w - 0.5; // -0.5 .. 0.5
+  const ny = y / h - 0.5;
+  if (Math.abs(nx) > Math.abs(ny)) {
+    return nx < 0 ? "left" : "right";
+  }
+  return ny < 0 ? "top" : "bottom";
+}
 
 const HOST_LABEL = (() => {
   const { user, host } = window.mandeck.hostInfo;
@@ -52,13 +70,87 @@ export function Terminal({
   onFocus,
   onClose,
   onToggleMaximize,
+  onMovePane,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const hoveredUrlRef = useRef<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [title, setTitle] = useState(HOST_LABEL);
+  const [hoverEdge, setHoverEdge] = useState<Edge | null>(null);
+
+  // --- Pane-as-draggable (header is the handle) -----------------------------
+  const [{ isDragging }, dragRef, dragPreview] = useDrag<
+    PaneDragItem,
+    void,
+    { isDragging: boolean }
+  >(
+    () => ({
+      type: PANE_DND_TYPE,
+      item: { pid: id },
+      collect: (m) => ({ isDragging: m.isDragging() }),
+    }),
+    [id]
+  );
+  useEffect(() => {
+    // Hide the default HTML5 drag preview; PaneDragLayer renders our own.
+    dragPreview(getEmptyImage(), { captureDraggingState: true });
+  }, [dragPreview]);
+
+  // --- Pane-as-drop-target (body computes which edge the cursor is over) ----
+  const computeEdge = useCallback(
+    (clientX: number, clientY: number): Edge | null => {
+      const rect = bodyRef.current?.getBoundingClientRect();
+      if (!rect) return null;
+      return edgeFromOffset(
+        clientX - rect.left,
+        clientY - rect.top,
+        rect.width,
+        rect.height
+      );
+    },
+    []
+  );
+
+  const [{ isOver, draggedPid }, dropRef] = useDrop<
+    PaneDragItem,
+    void,
+    { isOver: boolean; draggedPid: string | null }
+  >(
+    () => ({
+      accept: PANE_DND_TYPE,
+      hover: (item, monitor) => {
+        if (item.pid === id) {
+          setHoverEdge(null);
+          return;
+        }
+        const offset = monitor.getClientOffset();
+        if (!offset) return;
+        const edge = computeEdge(offset.x, offset.y);
+        if (edge !== hoverEdge) setHoverEdge(edge);
+      },
+      drop: (item, monitor) => {
+        if (item.pid === id) return;
+        const offset = monitor.getClientOffset();
+        const edge = offset ? computeEdge(offset.x, offset.y) : hoverEdge;
+        if (edge) onMovePane(item.pid, id, edge);
+        setHoverEdge(null);
+      },
+      collect: (m) => ({
+        isOver: m.isOver({ shallow: true }),
+        draggedPid: (m.getItem() as PaneDragItem | null)?.pid ?? null,
+      }),
+    }),
+    [id, computeEdge, hoverEdge, onMovePane]
+  );
+
+  useEffect(() => {
+    if (!isOver) setHoverEdge(null);
+  }, [isOver]);
+
+  const dropIsSelf = draggedPid === id;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -295,15 +387,22 @@ export function Terminal({
   if (focused) classes.push("focused");
   if (dragOver) classes.push("drag-over");
   if (maximized) classes.push("maximized");
+  if (isDragging) classes.push("pane-dragging");
 
   const handleHeaderMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest(".pane-btn")) return;
     onFocus();
   };
 
+  const showIndicator = isOver && !dropIsSelf && hoverEdge !== null;
+
   return (
     <div className={classes.join(" ")}>
-      <div className="pane-header" onMouseDown={handleHeaderMouseDown}>
+      <div
+        className="pane-header"
+        ref={dragRef as unknown as React.Ref<HTMLDivElement>}
+        onMouseDown={handleHeaderMouseDown}
+      >
         <span className="pane-header-icon" aria-hidden>▢</span>
         <span className="pane-header-title" title={title}>{title}</span>
         <button
@@ -323,8 +422,17 @@ export function Terminal({
           <IconClose />
         </button>
       </div>
-      <div className="pane-body">
+      <div
+        className="pane-body"
+        ref={(el) => {
+          bodyRef.current = el;
+          dropRef(el);
+        }}
+      >
         <div ref={hostRef} className="xterm-container" />
+        {showIndicator && (
+          <div className={`pane-drop-indicator edge-${hoverEdge}`} aria-hidden />
+        )}
       </div>
     </div>
   );

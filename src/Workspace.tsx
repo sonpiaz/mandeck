@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Allotment, type AllotmentHandle } from "allotment";
 import { Terminal } from "./Terminal";
-import type { Col } from "./types";
+import type { Col, Edge } from "./types";
 
 type Props = {
   tid: string;
@@ -12,6 +12,7 @@ type Props = {
   onFocusPane: (pid: string) => void;
   onClosePane: (pid: string) => void;
   onToggleMaximize: (pid: string) => void;
+  onMovePane: (src: string, target: string, edge: Edge) => void;
 };
 
 export function Workspace({
@@ -23,6 +24,7 @@ export function Workspace({
   onFocusPane,
   onClosePane,
   onToggleMaximize,
+  onMovePane,
 }: Props) {
   const outerRef = useRef<AllotmentHandle>(null);
   const innerRefs = useRef<Map<string, AllotmentHandle | null>>(new Map());
@@ -68,6 +70,7 @@ export function Workspace({
                     onFocus={() => onFocusPane(pid)}
                     onClose={() => onClosePane(pid)}
                     onToggleMaximize={() => onToggleMaximize(pid)}
+                    onMovePane={onMovePane}
                   />
                 </Allotment.Pane>
               ))}

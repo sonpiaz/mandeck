@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
+import { DndProvider } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
 import { TabBar } from "./TabBar";
 import { Workspace } from "./Workspace";
-import type { AppState, Col, Tab } from "./types";
+import { PaneDragLayer } from "./PaneDragLayer";
+import type { AppState, Col, Edge, Tab } from "./types";
 
 let _pid = 0;
 let _cid = 0;
@@ -49,6 +52,58 @@ function addPaneToTab(tab: Tab): Tab {
     );
   }
   return { ...tab, cols: nextCols, focusedPaneId: pid, maximizedPaneId: null };
+}
+
+function movePaneInTab(tab: Tab, srcPid: string, targetPid: string, edge: Edge): Tab {
+  if (srcPid === targetPid) return tab;
+
+  // Remove src from its current column.
+  let cols: Col[] = tab.cols
+    .map((c) => ({ ...c, panes: c.panes.filter((p) => p !== srcPid) }))
+    .filter((c) => c.panes.length > 0);
+
+  const targetColIdx = cols.findIndex((c) => c.panes.includes(targetPid));
+  if (targetColIdx === -1) return tab; // target vanished (src was alone with target somehow)
+
+  const targetPaneIdx = cols[targetColIdx].panes.indexOf(targetPid);
+
+  if (edge === "top" || edge === "bottom") {
+    const insertAt = edge === "top" ? targetPaneIdx : targetPaneIdx + 1;
+    cols = cols.map((c, i) =>
+      i === targetColIdx
+        ? {
+            ...c,
+            panes: [...c.panes.slice(0, insertAt), srcPid, ...c.panes.slice(insertAt)],
+          }
+        : c
+    );
+  } else {
+    // left or right: create a new column when there is room, otherwise fall
+    // back to inserting at the top/bottom of the target column so the user's
+    // drop still lands somewhere reasonable.
+    if (cols.length < MAX_COLS) {
+      const insertColIdx = edge === "left" ? targetColIdx : targetColIdx + 1;
+      const newCol: Col = { cid: newCid(), panes: [srcPid] };
+      cols = [...cols.slice(0, insertColIdx), newCol, ...cols.slice(insertColIdx)];
+    } else {
+      const insertAt = edge === "left" ? targetPaneIdx : targetPaneIdx + 1;
+      cols = cols.map((c, i) =>
+        i === targetColIdx
+          ? {
+              ...c,
+              panes: [...c.panes.slice(0, insertAt), srcPid, ...c.panes.slice(insertAt)],
+            }
+          : c
+      );
+    }
+  }
+
+  return {
+    ...tab,
+    cols,
+    focusedPaneId: srcPid,
+    maximizedPaneId: null,
+  };
 }
 
 function closePaneInTab(tab: Tab, targetPid?: string): Tab | null {
@@ -139,6 +194,10 @@ export function App() {
     }));
   };
 
+  const movePane = (srcPid: string, targetPid: string, edge: Edge) => {
+    updateActiveTab((t) => movePaneInTab(t, srcPid, targetPid, edge));
+  };
+
   const switchTab = (tid: string) =>
     setState((s) => (s.activeTabId === tid ? s : { ...s, activeTabId: tid }));
 
@@ -223,34 +282,38 @@ export function App() {
   }));
 
   return (
-    <div className="app">
-      <div className="titlebar">
-        <div className="titlebar-traffic-spacer" />
-        <TabBar
-          tabs={tabSummaries}
-          activeTabId={state.activeTabId}
-          onSelect={switchTab}
-          onClose={closeTab}
-          onRename={renameTab}
-          onNew={addTab}
-          onReorder={reorderTab}
-        />
-      </div>
-      <div className="workspaces">
-        {state.tabs.map((tab) => (
-          <Workspace
-            key={tab.tid}
-            tid={tab.tid}
-            cols={tab.cols}
-            focusedPaneId={tab.focusedPaneId}
-            maximizedPaneId={tab.maximizedPaneId}
-            active={tab.tid === state.activeTabId}
-            onFocusPane={focusPane}
-            onClosePane={closePaneById}
-            onToggleMaximize={toggleMaximize}
+    <DndProvider backend={HTML5Backend}>
+      <div className="app">
+        <div className="titlebar">
+          <div className="titlebar-traffic-spacer" />
+          <TabBar
+            tabs={tabSummaries}
+            activeTabId={state.activeTabId}
+            onSelect={switchTab}
+            onClose={closeTab}
+            onRename={renameTab}
+            onNew={addTab}
+            onReorder={reorderTab}
           />
-        ))}
+        </div>
+        <div className="workspaces">
+          {state.tabs.map((tab) => (
+            <Workspace
+              key={tab.tid}
+              tid={tab.tid}
+              cols={tab.cols}
+              focusedPaneId={tab.focusedPaneId}
+              maximizedPaneId={tab.maximizedPaneId}
+              active={tab.tid === state.activeTabId}
+              onFocusPane={focusPane}
+              onClosePane={closePaneById}
+              onToggleMaximize={toggleMaximize}
+              onMovePane={movePane}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+      <PaneDragLayer />
+    </DndProvider>
   );
 }
