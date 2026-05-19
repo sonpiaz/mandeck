@@ -220,7 +220,12 @@ ipcMain.on("state:save", (_e, payload: unknown) => {
 ipcMain.handle("drop:stage", (_e, srcPath: string): string => {
   try {
     if (!srcPath || !fs.existsSync(srcPath)) return "";
-    const dropsDir = path.join(app.getPath("userData"), "drops");
+    // Stage outside userData because the default macOS userData lives in
+    // "~/Library/Application Support/..." which contains a space —
+    // Claude Code's path-to-image detector stops at the first space and
+    // the path is rendered as text instead of [Image #N]. ~/.mandeck/drops/
+    // is fully space-free.
+    const dropsDir = path.join(os.homedir(), ".mandeck", "drops");
     fs.mkdirSync(dropsDir, { recursive: true });
     const ext = path.extname(srcPath).toLowerCase() || ".bin";
     const stamp = Date.now().toString(36);
