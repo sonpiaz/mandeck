@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { DndProvider } from "react-dnd";
+import { DndProvider, useDragLayer } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { TabBar } from "./TabBar";
 import { Workspace } from "./Workspace";
 import { PaneDragLayer } from "./PaneDragLayer";
-import type { AppState, Col, Edge, Tab } from "./types";
+import { PANE_DND_TYPE, type AppState, type Col, type Edge, type Tab } from "./types";
 
 let _pid = 0;
 let _cid = 0;
@@ -125,7 +125,19 @@ function closePaneInTab(tab: Tab, targetPid?: string): Tab | null {
 }
 
 export function App() {
+  return (
+    <DndProvider backend={HTML5Backend}>
+      <AppBody />
+      <PaneDragLayer />
+    </DndProvider>
+  );
+}
+
+function AppBody() {
   const [state, setState] = useState<AppState>(initialState);
+  const draggingPane = useDragLayer(
+    (m) => m.isDragging() && m.getItemType() === PANE_DND_TYPE
+  );
 
   const updateActiveTab = (updater: (tab: Tab) => Tab) => {
     setState((s) => ({
@@ -282,38 +294,35 @@ export function App() {
   }));
 
   return (
-    <DndProvider backend={HTML5Backend}>
-      <div className="app">
-        <div className="titlebar">
-          <div className="titlebar-traffic-spacer" />
-          <TabBar
-            tabs={tabSummaries}
-            activeTabId={state.activeTabId}
-            onSelect={switchTab}
-            onClose={closeTab}
-            onRename={renameTab}
-            onNew={addTab}
-            onReorder={reorderTab}
-          />
-        </div>
-        <div className="workspaces">
-          {state.tabs.map((tab) => (
-            <Workspace
-              key={tab.tid}
-              tid={tab.tid}
-              cols={tab.cols}
-              focusedPaneId={tab.focusedPaneId}
-              maximizedPaneId={tab.maximizedPaneId}
-              active={tab.tid === state.activeTabId}
-              onFocusPane={focusPane}
-              onClosePane={closePaneById}
-              onToggleMaximize={toggleMaximize}
-              onMovePane={movePane}
-            />
-          ))}
-        </div>
+    <div className={`app${draggingPane ? " app-dragging-pane" : ""}`}>
+      <div className="titlebar">
+        <div className="titlebar-traffic-spacer" />
+        <TabBar
+          tabs={tabSummaries}
+          activeTabId={state.activeTabId}
+          onSelect={switchTab}
+          onClose={closeTab}
+          onRename={renameTab}
+          onNew={addTab}
+          onReorder={reorderTab}
+        />
       </div>
-      <PaneDragLayer />
-    </DndProvider>
+      <div className="workspaces">
+        {state.tabs.map((tab) => (
+          <Workspace
+            key={tab.tid}
+            tid={tab.tid}
+            cols={tab.cols}
+            focusedPaneId={tab.focusedPaneId}
+            maximizedPaneId={tab.maximizedPaneId}
+            active={tab.tid === state.activeTabId}
+            onFocusPane={focusPane}
+            onClosePane={closePaneById}
+            onToggleMaximize={toggleMaximize}
+            onMovePane={movePane}
+          />
+        ))}
+      </div>
+    </div>
   );
 }

@@ -89,10 +89,10 @@ export function Terminal({
   >(
     () => ({
       type: PANE_DND_TYPE,
-      item: { pid: id },
+      item: () => ({ pid: id, title }),
       collect: (m) => ({ isDragging: m.isDragging() }),
     }),
-    [id]
+    [id, title]
   );
   useEffect(() => {
     // Hide the default HTML5 drag preview; PaneDragLayer renders our own.
