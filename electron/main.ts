@@ -27,6 +27,10 @@ const ptys = new Map<string, IPty>();
 let windowSeq = 0;
 let cascadeOffset = 0;
 
+const STATE_PATH = () => path.join(app.getPath("userData"), "state.json");
+const QUIT_CONFIRM_WINDOW_MS = 2000;
+let quitConfirmedUntil = 0;
+
 function focusedWindow(): BrowserWindow | null {
   return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
 }
@@ -142,6 +146,9 @@ ipcMain.handle("pty:create", (event, { id, cols, rows, cwd }) => {
       COLORTERM: "truecolor",
       MANDECK: "1",
       MANDECK_PID: id,
+      // Causes macOS /etc/zshrc to install update_terminal_cwd → zsh emits
+      // OSC 7 on every prompt; we listen for it to persist per-pane cwd.
+      TERM_PROGRAM: "Apple_Terminal",
     },
   });
   ptys.set(id, pty);
@@ -187,6 +194,27 @@ ipcMain.on("window:new", () => {
 ipcMain.on("window:close", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   win?.close();
+});
+
+ipcMain.handle("state:load", (): unknown => {
+  try {
+    const raw = fs.readFileSync(STATE_PATH(), "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.on("state:save", (_e, payload: unknown) => {
+  try {
+    const file = STATE_PATH();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = file + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(payload));
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    console.error("[mandeck] state:save failed", err);
+  }
 });
 
 ipcMain.handle("drop:stage", (_e, srcPath: string): string => {
@@ -249,9 +277,23 @@ app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-app.on("before-quit", () => {
-  for (const pty of ptys.values()) {
-    try { pty.kill(); } catch { /* noop */ }
+app.on("before-quit", (e) => {
+  const now = Date.now();
+  if (now < quitConfirmedUntil) {
+    // Confirmed within the window — proceed with the quit.
+    for (const pty of ptys.values()) {
+      try { pty.kill(); } catch { /* noop */ }
+    }
+    ptys.clear();
+    return;
   }
-  ptys.clear();
+  // First ⌘Q press: cancel quit, show toast, arm the confirm window.
+  e.preventDefault();
+  quitConfirmedUntil = now + QUIT_CONFIRM_WINDOW_MS;
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send("app:quit-prompt", QUIT_CONFIRM_WINDOW_MS);
+  }
+  setTimeout(() => {
+    if (Date.now() >= quitConfirmedUntil) quitConfirmedUntil = 0;
+  }, QUIT_CONFIRM_WINDOW_MS + 50);
 });

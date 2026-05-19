@@ -8,11 +8,13 @@ type Props = {
   cols: Col[];
   focusedPaneId: string;
   maximizedPaneId: string | null;
+  paneCwds: Record<string, string>;
   active: boolean;
   onFocusPane: (pid: string) => void;
   onClosePane: (pid: string) => void;
   onToggleMaximize: (pid: string) => void;
   onMovePane: (src: string, target: string, edge: Edge) => void;
+  onPaneCwd: (pid: string, cwd: string) => void;
 };
 
 export function Workspace({
@@ -20,11 +22,13 @@ export function Workspace({
   cols,
   focusedPaneId,
   maximizedPaneId,
+  paneCwds,
   active,
   onFocusPane,
   onClosePane,
   onToggleMaximize,
   onMovePane,
+  onPaneCwd,
 }: Props) {
   const outerRef = useRef<AllotmentHandle>(null);
   const innerRefs = useRef<Map<string, AllotmentHandle | null>>(new Map());
@@ -65,12 +69,14 @@ export function Workspace({
                 <Allotment.Pane key={pid} minSize={80}>
                   <Terminal
                     id={pid}
+                    initialCwd={paneCwds[pid]}
                     focused={active && pid === focusedPaneId}
                     maximized={pid === maximizedPaneId}
                     onFocus={() => onFocusPane(pid)}
                     onClose={() => onClosePane(pid)}
                     onToggleMaximize={() => onToggleMaximize(pid)}
                     onMovePane={onMovePane}
+                    onCwdChange={onPaneCwd}
                   />
                 </Allotment.Pane>
               ))}

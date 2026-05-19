@@ -12,12 +12,14 @@ declare global {
 
 type Props = {
   id: string;
+  initialCwd?: string;
   focused: boolean;
   maximized: boolean;
   onFocus: () => void;
   onClose: () => void;
   onToggleMaximize: () => void;
   onMovePane: (src: string, target: string, edge: Edge) => void;
+  onCwdChange: (pid: string, cwd: string) => void;
 };
 
 function edgeFromOffset(
@@ -65,12 +67,14 @@ const URL_RE = /https?:\/\/[^\s<>"'`)\]]+/g;
 
 export function Terminal({
   id,
+  initialCwd,
   focused,
   maximized,
   onFocus,
   onClose,
   onToggleMaximize,
   onMovePane,
+  onCwdChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -80,6 +84,8 @@ export function Terminal({
   const [dragOver, setDragOver] = useState(false);
   const [title, setTitle] = useState(HOST_LABEL);
   const [hoverEdge, setHoverEdge] = useState<Edge | null>(null);
+  const onCwdChangeRef = useRef(onCwdChange);
+  useEffect(() => { onCwdChangeRef.current = onCwdChange; }, [onCwdChange]);
 
   // --- Pane-as-draggable (header is the handle) -----------------------------
   const [{ isDragging }, dragRef, dragPreview] = useDrag<
@@ -198,7 +204,7 @@ export function Terminal({
 
     const { cols, rows } = term;
     window.mandeck
-      .createPty({ id, cols, rows })
+      .createPty({ id, cols, rows, cwd: initialCwd })
       .then(() => {
         if (disposed) {
           window.mandeck.kill(id);
@@ -229,6 +235,18 @@ export function Terminal({
     const titleDisp = term.onTitleChange((t) => {
       const trimmed = t.trim();
       if (trimmed) setTitle(trimmed);
+    });
+
+    // OSC 7: shells report cwd as `file://host/path` on every prompt.
+    const cwdOscDisp = term.parser.registerOscHandler(7, (data) => {
+      const m = /^file:\/\/[^/]*(\/.*)$/.exec(data);
+      if (m) {
+        try {
+          const cwd = decodeURIComponent(m[1]);
+          onCwdChangeRef.current(id, cwd);
+        } catch { /* malformed encoding — ignore */ }
+      }
+      return true;
     });
 
     const mouseDown = () => {
@@ -356,6 +374,7 @@ export function Terminal({
       host.removeEventListener("dragleave", onDragLeave);
       host.removeEventListener("drop", onDrop);
       titleDisp.dispose();
+      cwdOscDisp.dispose();
       linkProvider.dispose();
       offPaste();
       inputDisp.dispose();

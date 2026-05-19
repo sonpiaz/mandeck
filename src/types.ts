@@ -17,4 +17,13 @@ export type Tab = {
 export type AppState = {
   tabs: Tab[];
   activeTabId: string;
+  paneCwds: Record<string, string>;
+};
+
+export const PERSIST_VERSION = 1;
+export type PersistedState = {
+  version: number;
+  tabs: Tab[];
+  activeTabId: string;
+  paneCwds: Record<string, string>;
 };

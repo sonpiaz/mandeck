@@ -50,6 +50,14 @@ const api = {
   },
   stageDroppedFile: (srcPath: string): Promise<string> =>
     ipcRenderer.invoke("drop:stage", srcPath),
+
+  loadState: (): Promise<unknown> => ipcRenderer.invoke("state:load"),
+  saveState: (payload: unknown) => ipcRenderer.send("state:save", payload),
+  onQuitPrompt: (cb: (windowMs: number) => void) => {
+    const listener = (_: unknown, windowMs: number) => cb(windowMs);
+    ipcRenderer.on("app:quit-prompt", listener);
+    return () => ipcRenderer.removeListener("app:quit-prompt", listener);
+  },
   openExternal: (url: string): Promise<boolean> =>
     ipcRenderer.invoke("shell:openExternal", url),
   readClipboardText: (): Promise<string> =>

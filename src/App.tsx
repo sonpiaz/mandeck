@@ -1,10 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DndProvider, useDragLayer } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { TabBar } from "./TabBar";
 import { Workspace } from "./Workspace";
 import { PaneDragLayer } from "./PaneDragLayer";
-import { PANE_DND_TYPE, type AppState, type Col, type Edge, type Tab } from "./types";
+import {
+  PANE_DND_TYPE,
+  PERSIST_VERSION,
+  type AppState,
+  type Col,
+  type Edge,
+  type PersistedState,
+  type Tab,
+} from "./types";
 
 let _pid = 0;
 let _cid = 0;
@@ -30,8 +38,59 @@ const makeTab = (): Tab => {
 
 const initialState = (): AppState => {
   const tab = makeTab();
-  return { tabs: [tab], activeTabId: tab.tid };
+  return { tabs: [tab], activeTabId: tab.tid, paneCwds: {} };
 };
+
+function maxNumericSuffix(ids: string[]): number {
+  let m = 0;
+  for (const id of ids) {
+    const n = Number(id.slice(1));
+    if (Number.isFinite(n) && n > m) m = n;
+  }
+  return m;
+}
+
+function restoreCounters(state: AppState) {
+  const pids: string[] = [];
+  const cids: string[] = [];
+  const tids: string[] = [];
+  for (const t of state.tabs) {
+    tids.push(t.tid);
+    for (const c of t.cols) {
+      cids.push(c.cid);
+      for (const p of c.panes) pids.push(p);
+    }
+  }
+  _pid = maxNumericSuffix(pids);
+  _cid = maxNumericSuffix(cids);
+  _tid = maxNumericSuffix(tids);
+}
+
+function hydrate(saved: unknown): AppState | null {
+  if (!saved || typeof saved !== "object") return null;
+  const s = saved as Partial<PersistedState>;
+  if (s.version !== PERSIST_VERSION) return null;
+  if (!Array.isArray(s.tabs) || s.tabs.length === 0) return null;
+  if (typeof s.activeTabId !== "string") return null;
+  // Sanity-check structure; if anything's malformed, fall back to default.
+  for (const t of s.tabs) {
+    if (
+      !t ||
+      typeof t.tid !== "string" ||
+      !Array.isArray(t.cols) ||
+      typeof t.focusedPaneId !== "string"
+    ) return null;
+    for (const c of t.cols) {
+      if (!c || typeof c.cid !== "string" || !Array.isArray(c.panes)) return null;
+      if (c.panes.some((p) => typeof p !== "string")) return null;
+    }
+  }
+  return {
+    tabs: s.tabs,
+    activeTabId: s.activeTabId,
+    paneCwds: (s.paneCwds && typeof s.paneCwds === "object") ? s.paneCwds : {},
+  };
+}
 
 function addPaneToTab(tab: Tab): Tab {
   const pid = newPid();
@@ -135,9 +194,64 @@ export function App() {
 
 function AppBody() {
   const [state, setState] = useState<AppState>(initialState);
+  const [ready, setReady] = useState(false);
+  const [quitToast, setQuitToast] = useState<{ until: number } | null>(null);
   const draggingPane = useDragLayer(
     (m) => m.isDragging() && m.getItemType() === PANE_DND_TYPE
   );
+
+  // ---- Persisted state: load once on mount, debounced save on change. -----
+  useEffect(() => {
+    let cancelled = false;
+    window.mandeck.loadState().then((raw) => {
+      if (cancelled) return;
+      const hydrated = hydrate(raw);
+      if (hydrated) {
+        restoreCounters(hydrated);
+        setState(hydrated);
+      }
+      setReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const payload: PersistedState = {
+        version: PERSIST_VERSION,
+        tabs: state.tabs,
+        activeTabId: state.activeTabId,
+        paneCwds: state.paneCwds,
+      };
+      window.mandeck.saveState(payload);
+    }, 400);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [ready, state]);
+
+  // ---- ⌘Q double-press confirm: main fires app:quit-prompt; show toast. ---
+  useEffect(() => {
+    const off = window.mandeck.onQuitPrompt((windowMs) => {
+      setQuitToast({ until: Date.now() + windowMs });
+    });
+    return () => {
+      off();
+    };
+  }, []);
+  useEffect(() => {
+    if (!quitToast) return;
+    const remaining = quitToast.until - Date.now();
+    if (remaining <= 0) {
+      setQuitToast(null);
+      return;
+    }
+    const t = setTimeout(() => setQuitToast(null), remaining);
+    return () => clearTimeout(t);
+  }, [quitToast]);
 
   const updateActiveTab = (updater: (tab: Tab) => Tab) => {
     setState((s) => ({
@@ -150,7 +264,7 @@ function AppBody() {
 
   const addTab = () => {
     const tab = makeTab();
-    setState((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.tid }));
+    setState((s) => ({ ...s, tabs: [...s.tabs, tab], activeTabId: tab.tid }));
   };
 
   const closeTab = (tid?: string) => {
@@ -167,7 +281,7 @@ function AppBody() {
         s.activeTabId === targetTid
           ? nextTabs[Math.min(idx, nextTabs.length - 1)].tid
           : s.activeTabId;
-      return { tabs: nextTabs, activeTabId: nextActive };
+      return { ...s, tabs: nextTabs, activeTabId: nextActive };
     });
   };
 
@@ -185,6 +299,7 @@ function AppBody() {
         const idx = s.tabs.findIndex((t) => t.tid === s.activeTabId);
         const nextTabs = s.tabs.filter((t) => t.tid !== s.activeTabId);
         return {
+          ...s,
           tabs: nextTabs,
           activeTabId: nextTabs[Math.min(idx, nextTabs.length - 1)].tid,
         };
@@ -208,6 +323,13 @@ function AppBody() {
 
   const movePane = (srcPid: string, targetPid: string, edge: Edge) => {
     updateActiveTab((t) => movePaneInTab(t, srcPid, targetPid, edge));
+  };
+
+  const setPaneCwd = (pid: string, cwd: string) => {
+    setState((s) => {
+      if (s.paneCwds[pid] === cwd) return s;
+      return { ...s, paneCwds: { ...s.paneCwds, [pid]: cwd } };
+    });
   };
 
   const switchTab = (tid: string) =>
@@ -293,6 +415,11 @@ function AppBody() {
     autoNamed: t.autoNamed,
   }));
 
+  if (!ready) {
+    // Avoid spawning PTYs before we know whether to restore a saved layout.
+    return <div className="app app-loading" />;
+  }
+
   return (
     <div className={`app${draggingPane ? " app-dragging-pane" : ""}`}>
       <div className="titlebar">
@@ -315,14 +442,21 @@ function AppBody() {
             cols={tab.cols}
             focusedPaneId={tab.focusedPaneId}
             maximizedPaneId={tab.maximizedPaneId}
+            paneCwds={state.paneCwds}
             active={tab.tid === state.activeTabId}
             onFocusPane={focusPane}
             onClosePane={closePaneById}
             onToggleMaximize={toggleMaximize}
             onMovePane={movePane}
+            onPaneCwd={setPaneCwd}
           />
         ))}
       </div>
+      {quitToast && (
+        <div className="quit-toast" role="status" aria-live="polite">
+          Press ⌘Q again to quit Mandeck
+        </div>
+      )}
     </div>
   );
 }

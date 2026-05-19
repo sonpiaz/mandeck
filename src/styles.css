@@ -373,4 +373,28 @@ body {
   100% { opacity: 1; }
 }
 
+/* --- ⌘Q double-press confirm toast --------------------------------------- */
+.quit-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  background: rgba(20, 24, 32, 0.95);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  z-index: 2000;
+  pointer-events: none;
+  animation: quit-toast-in 0.12s ease-out;
+}
+@keyframes quit-toast-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.app.app-loading { background: var(--bg); }
+
 .split-view-view { background: var(--bg-pane); }
