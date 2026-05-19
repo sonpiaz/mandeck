@@ -1,8 +1,10 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   ipcMain,
   Menu,
+  shell,
   type MenuItemConstructorOptions,
 } from "electron";
 import { spawn, type IPty } from "node-pty";
@@ -174,6 +176,41 @@ ipcMain.on("window:new", () => {
 ipcMain.on("window:close", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   win?.close();
+});
+
+ipcMain.handle("shell:openExternal", (_e, url: string) => {
+  if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return false;
+  shell.openExternal(url).catch(() => {});
+  return true;
+});
+
+ipcMain.handle("clipboard:readText", () => clipboard.readText());
+
+ipcMain.on("ctx-menu:show", (event, { url, selection }: { url?: string; selection?: string }) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  const items: MenuItemConstructorOptions[] = [];
+  if (url) {
+    items.push({
+      label: `Open Link  —  ${url.length > 60 ? url.slice(0, 57) + "…" : url}`,
+      click: () => { shell.openExternal(url).catch(() => {}); },
+    });
+    items.push({
+      label: "Copy Link Address",
+      click: () => clipboard.writeText(url),
+    });
+    items.push({ type: "separator" });
+  }
+  if (selection) {
+    items.push({ label: "Copy", click: () => clipboard.writeText(selection) });
+  } else {
+    items.push({ label: "Copy", enabled: false });
+  }
+  items.push({
+    label: "Paste",
+    click: () => event.sender.send("ctx-menu:paste"),
+  });
+  Menu.buildFromTemplate(items).popup({ window: win });
 });
 
 app.whenReady().then(() => {

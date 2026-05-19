@@ -37,6 +37,18 @@ const api = {
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
   },
+
+  openExternal: (url: string): Promise<boolean> =>
+    ipcRenderer.invoke("shell:openExternal", url),
+  readClipboardText: (): Promise<string> =>
+    ipcRenderer.invoke("clipboard:readText"),
+  showCtxMenu: (payload: { url?: string; selection?: string }) =>
+    ipcRenderer.send("ctx-menu:show", payload),
+  onCtxMenuPaste: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on("ctx-menu:paste", listener);
+    return () => ipcRenderer.removeListener("ctx-menu:paste", listener);
+  },
 };
 
 contextBridge.exposeInMainWorld("mandeck", api);
