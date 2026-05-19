@@ -2,8 +2,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal as XTerm, type ILink } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { useDrag, useDrop } from "react-dnd";
-import { getEmptyImage } from "react-dnd-html5-backend";
+import { getEmptyImage, NativeTypes } from "react-dnd-html5-backend";
 import { PANE_DND_TYPE, type Edge, type PaneDragItem } from "./types";
+
+function shellQuoteIfNeeded(p: string): string {
+  if (!/[\s'"\\$`(){}[\]&;<>*?#!]/.test(p)) return p;
+  return `'${p.replace(/'/g, `'\\''`)}'`;
+}
+
+async function pathsForFiles(files: File[]): Promise<string[]> {
+  return files
+    .map((f) => {
+      const legacy = (f as File & { path?: string }).path;
+      if (typeof legacy === "string" && legacy.length > 0) return legacy;
+      return window.mandeck.getPathForFile(f);
+    })
+    .filter((p): p is string => typeof p === "string" && p.length > 0);
+}
 import type { MandeckApi } from "../electron/preload";
 
 declare global {
@@ -120,14 +135,50 @@ export function Terminal({
     []
   );
 
-  const [{ isOver, draggedPid }, dropRef] = useDrop<
-    PaneDragItem,
+  const handleFileDrop = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      const sourcePaths = await pathsForFiles(files);
+      if (sourcePaths.length === 0) {
+        console.warn(
+          "[mandeck] drop: no filesystem path for",
+          files.map((f) => f.name)
+        );
+        return;
+      }
+      const staged = await Promise.all(
+        sourcePaths.map((src) => window.mandeck.stageDroppedFile(src))
+      );
+      const finalPaths = staged
+        .map((p, i) => p || sourcePaths[i])
+        .filter((p) => p.length > 0);
+      if (finalPaths.length === 0) return;
+      onFocus();
+      termRef.current?.focus();
+      // Stage paths are space-free, but be defensive for the original-path
+      // fallback case where staging failed.
+      window.mandeck.write(id, finalPaths.map(shellQuoteIfNeeded).join(" "));
+    },
+    [id, onFocus]
+  );
+
+  const [{ isOver, draggedPid, hoveringType }, dropRef] = useDrop<
+    PaneDragItem | { files: File[] },
     void,
-    { isOver: boolean; draggedPid: string | null }
+    {
+      isOver: boolean;
+      draggedPid: string | null;
+      hoveringType: string | symbol | null;
+    }
   >(
     () => ({
-      accept: PANE_DND_TYPE,
-      hover: (item, monitor) => {
+      accept: [PANE_DND_TYPE, NativeTypes.FILE],
+      hover: (_item, monitor) => {
+        if (monitor.getItemType() !== PANE_DND_TYPE) {
+          if (hoverEdge !== null) setHoverEdge(null);
+          return;
+        }
+        const item = monitor.getItem() as PaneDragItem;
         if (item.pid === id) {
           setHoverEdge(null);
           return;
@@ -137,20 +188,38 @@ export function Terminal({
         const edge = computeEdge(offset.x, offset.y);
         if (edge !== hoverEdge) setHoverEdge(edge);
       },
-      drop: (item, monitor) => {
-        if (item.pid === id) return;
+      drop: (_item, monitor) => {
+        const type = monitor.getItemType();
+        if (type === NativeTypes.FILE) {
+          const payload = monitor.getItem() as { files?: File[] };
+          if (payload?.files?.length) void handleFileDrop(payload.files);
+          return;
+        }
+        const paneItem = monitor.getItem() as PaneDragItem;
+        if (paneItem.pid === id) return;
         const offset = monitor.getClientOffset();
         const edge = offset ? computeEdge(offset.x, offset.y) : hoverEdge;
-        if (edge) onMovePane(item.pid, id, edge);
+        if (edge) onMovePane(paneItem.pid, id, edge);
         setHoverEdge(null);
       },
       collect: (m) => ({
         isOver: m.isOver({ shallow: true }),
-        draggedPid: (m.getItem() as PaneDragItem | null)?.pid ?? null,
+        draggedPid:
+          m.getItemType() === PANE_DND_TYPE
+            ? ((m.getItem() as PaneDragItem | null)?.pid ?? null)
+            : null,
+        hoveringType: m.isOver({ shallow: true }) ? m.getItemType() : null,
       }),
     }),
-    [id, computeEdge, hoverEdge, onMovePane]
+    [id, computeEdge, hoverEdge, onMovePane, handleFileDrop]
   );
+
+  // Drive the existing drag-over visual state via react-dnd instead of the
+  // native dragover listener we used to install on `host` — react-dnd's
+  // backend now owns those events, so the old listener never fired.
+  useEffect(() => {
+    setDragOver(isOver && hoveringType === NativeTypes.FILE);
+  }, [isOver, hoveringType]);
 
   useEffect(() => {
     if (!isOver) setHoverEdge(null);
@@ -323,56 +392,16 @@ export function Terminal({
       });
     });
 
-    const onDragOver = (e: DragEvent) => {
-      if (!e.dataTransfer) return;
-      if (!Array.from(e.dataTransfer.types).includes("Files")) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
-      setDragOver(true);
-    };
-    const onDragLeave = (e: DragEvent) => {
-      if (e.relatedTarget && host.contains(e.relatedTarget as Node)) return;
-      setDragOver(false);
-    };
-    const onDrop = async (e: DragEvent) => {
-      if (!e.dataTransfer) return;
-      e.preventDefault();
-      setDragOver(false);
-      const files = Array.from(e.dataTransfer.files);
-      const sourcePaths = files
-        .map((f) => {
-          const legacy = (f as File & { path?: string }).path;
-          if (typeof legacy === "string" && legacy.length > 0) return legacy;
-          return window.mandeck.getPathForFile(f);
-        })
-        .filter((p): p is string => typeof p === "string" && p.length > 0);
-      if (sourcePaths.length === 0) {
-        console.warn("[mandeck] drop: no filesystem path for", files.map((f) => f.name));
-        return;
-      }
-      const staged = await Promise.all(
-        sourcePaths.map((src) => window.mandeck.stageDroppedFile(src))
-      );
-      const finalPaths = staged
-        .map((p, i) => p || sourcePaths[i])
-        .filter((p) => p.length > 0);
-      onFocus();
-      term.focus();
-      const text = finalPaths.join(" ");
-      window.mandeck.write(id, text);
-    };
-    host.addEventListener("dragover", onDragOver);
-    host.addEventListener("dragleave", onDragLeave);
-    host.addEventListener("drop", onDrop);
+    // Note: file drop handling lives in the useDrop hook above. react-dnd
+    // owns dragover/drop globally, so installing listeners on `host`
+    // directly would never fire. The hook routes NativeTypes.FILE drops
+    // through handleFileDrop and PANE_DND_TYPE drops through onMovePane.
 
     return () => {
       disposed = true;
       ro.disconnect();
       host.removeEventListener("mousedown", mouseDown);
       host.removeEventListener("contextmenu", onContextMenu);
-      host.removeEventListener("dragover", onDragOver);
-      host.removeEventListener("dragleave", onDragLeave);
-      host.removeEventListener("drop", onDrop);
       titleDisp.dispose();
       cwdOscDisp.dispose();
       linkProvider.dispose();
