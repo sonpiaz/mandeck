@@ -33,20 +33,33 @@ export function Workspace({
   const outerRef = useRef<AllotmentHandle>(null);
   const innerRefs = useRef<Map<string, AllotmentHandle | null>>(new Map());
   const hasInitialResetRef = useRef(false);
+  const prevColsCountRef = useRef(cols.length);
+  const prevTotalPanesRef = useRef(totalPanes);
 
-  // Reset Allotment to even splits ONLY the first time this workspace
-  // becomes active. Subsequent add/close/maximize operations preserve
-  // whatever ratios the user dragged into place — new panes get the
-  // freed space, not a full layout reset.
+  // Reset Allotment to even splits in three cases:
+  //   1. First time this workspace becomes active (initial layout).
+  //   2. A column was closed — the remaining columns should redistribute
+  //      evenly instead of leaving an empty gap where the closed one was.
+  //   3. A pane was closed — its sibling panes in the column should
+  //      redistribute evenly for the same reason.
+  // Adding a pane never triggers reset, so any custom ratios the user
+  // dragged into place survive ⌘D.
   useEffect(() => {
-    if (!active || hasInitialResetRef.current) return;
+    if (!active) return;
+    const isFirst = !hasInitialResetRef.current;
+    const shrunk =
+      cols.length < prevColsCountRef.current ||
+      totalPanes < prevTotalPanesRef.current;
+    prevColsCountRef.current = cols.length;
+    prevTotalPanesRef.current = totalPanes;
+    if (!isFirst && !shrunk) return;
     const raf = requestAnimationFrame(() => {
       outerRef.current?.reset();
       innerRefs.current.forEach((ref) => ref?.reset());
       hasInitialResetRef.current = true;
     });
     return () => cancelAnimationFrame(raf);
-  }, [active]);
+  }, [active, cols.length, totalPanes]);
 
   return (
     <div
