@@ -26,17 +26,21 @@ export function Workspace({
 }: Props) {
   const outerRef = useRef<AllotmentHandle>(null);
   const innerRefs = useRef<Map<string, AllotmentHandle | null>>(new Map());
+  const hasInitialResetRef = useRef(false);
 
-  const totalPanes = cols.reduce((s, c) => s + c.panes.length, 0);
-
+  // Reset Allotment to even splits ONLY the first time this workspace
+  // becomes active. Subsequent add/close/maximize operations preserve
+  // whatever ratios the user dragged into place — new panes get the
+  // freed space, not a full layout reset.
   useEffect(() => {
-    if (!active) return;
+    if (!active || hasInitialResetRef.current) return;
     const raf = requestAnimationFrame(() => {
       outerRef.current?.reset();
       innerRefs.current.forEach((ref) => ref?.reset());
+      hasInitialResetRef.current = true;
     });
     return () => cancelAnimationFrame(raf);
-  }, [cols.length, totalPanes, active, maximizedPaneId]);
+  }, [active]);
 
   return (
     <div
