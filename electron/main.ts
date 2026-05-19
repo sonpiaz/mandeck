@@ -9,7 +9,9 @@ import {
 } from "electron";
 import { spawn, type IPty } from "node-pty";
 import path from "node:path";
+import fs from "node:fs";
 import os from "node:os";
+import crypto from "node:crypto";
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 
@@ -185,6 +187,23 @@ ipcMain.on("window:new", () => {
 ipcMain.on("window:close", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   win?.close();
+});
+
+ipcMain.handle("drop:stage", (_e, srcPath: string): string => {
+  try {
+    if (!srcPath || !fs.existsSync(srcPath)) return "";
+    const dropsDir = path.join(app.getPath("userData"), "drops");
+    fs.mkdirSync(dropsDir, { recursive: true });
+    const ext = path.extname(srcPath).toLowerCase() || ".bin";
+    const stamp = Date.now().toString(36);
+    const rand = crypto.randomBytes(3).toString("hex");
+    const dst = path.join(dropsDir, `drop_${stamp}_${rand}${ext}`);
+    fs.copyFileSync(srcPath, dst);
+    return dst;
+  } catch (err) {
+    console.error("[mandeck] drop:stage failed", err);
+    return "";
+  }
 });
 
 ipcMain.handle("shell:openExternal", (_e, url: string) => {

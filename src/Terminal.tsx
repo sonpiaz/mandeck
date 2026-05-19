@@ -15,11 +15,6 @@ type Props = {
 
 const URL_RE = /https?:\/\/[^\s<>"'`)\]]+/g;
 
-function shellQuote(p: string): string {
-  if (!/[\s'"\\$`(){}[\]&;<>*?#!]/.test(p)) return p;
-  return `'${p.replace(/'/g, `'\\''`)}'`;
-}
-
 export function Terminal({ id, focused, onFocus }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
@@ -186,25 +181,31 @@ export function Terminal({ id, focused, onFocus }: Props) {
       if (e.relatedTarget && host.contains(e.relatedTarget as Node)) return;
       setDragOver(false);
     };
-    const onDrop = (e: DragEvent) => {
+    const onDrop = async (e: DragEvent) => {
       if (!e.dataTransfer) return;
       e.preventDefault();
       setDragOver(false);
       const files = Array.from(e.dataTransfer.files);
-      const paths = files
+      const sourcePaths = files
         .map((f) => {
           const legacy = (f as File & { path?: string }).path;
           if (typeof legacy === "string" && legacy.length > 0) return legacy;
           return window.mandeck.getPathForFile(f);
         })
         .filter((p): p is string => typeof p === "string" && p.length > 0);
-      if (paths.length === 0) {
+      if (sourcePaths.length === 0) {
         console.warn("[mandeck] drop: no filesystem path for", files.map((f) => f.name));
         return;
       }
+      const staged = await Promise.all(
+        sourcePaths.map((src) => window.mandeck.stageDroppedFile(src))
+      );
+      const finalPaths = staged
+        .map((p, i) => p || sourcePaths[i])
+        .filter((p) => p.length > 0);
       onFocus();
       term.focus();
-      const text = paths.map(shellQuote).join(" ");
+      const text = finalPaths.join(" ");
       window.mandeck.write(id, text);
     };
     host.addEventListener("dragover", onDragOver);

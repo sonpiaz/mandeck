@@ -168,4 +168,13 @@ body {
   inset: 6px;
 }
 
+.xterm .xterm-viewport {
+  scrollbar-width: none;
+}
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 .split-view-view { background: var(--bg-pane); }

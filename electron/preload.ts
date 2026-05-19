@@ -41,6 +41,8 @@ const api = {
   getPathForFile: (file: File): string => {
     try { return webUtils.getPathForFile(file); } catch { return ""; }
   },
+  stageDroppedFile: (srcPath: string): Promise<string> =>
+    ipcRenderer.invoke("drop:stage", srcPath),
   openExternal: (url: string): Promise<boolean> =>
     ipcRenderer.invoke("shell:openExternal", url),
   readClipboardText: (): Promise<string> =>

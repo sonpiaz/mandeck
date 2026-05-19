@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-electron
-.DS_Store
-*.log
+release
 .vite
+*.log
+.DS_Store
