@@ -15,6 +15,7 @@ import fs from "node:fs";
 import os from "node:os";
 import crypto from "node:crypto";
 import { loadStateFile, writeBackup, writeStateFile } from "./state-file.mjs";
+import { defaultSettings } from "./settings-schema.mjs";
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 
@@ -29,6 +30,7 @@ if (isDev) {
 const ptys = new Map<string, IPty>();
 
 const STATE_PATH = () => path.join(app.getPath("userData"), "state.json");
+const SETTINGS_PATH = () => path.join(app.getPath("userData"), "settings.json");
 const QUIT_CONFIRM_WINDOW_MS = 2000;
 let quitConfirmedUntil = 0;
 let quitFlushed = false;
@@ -47,6 +49,27 @@ function savesAllowed(): boolean {
   } catch {
     return false;
   }
+}
+
+// settings.json is owned by the main process (C3): a separate file from
+// state.json, loaded lazily, cached for PTY spawns, written immediately and
+// atomically on every renderer commit. A corrupt file yields null (the
+// renderer falls back to defaults in memory) and stays untouched on disk
+// until the next commit overwrites it.
+let settingsCache: Record<string, unknown> | null = null;
+let settingsLoaded = false;
+
+function readSettingsFile(): Record<string, unknown> | null {
+  if (!settingsLoaded) {
+    settingsLoaded = true;
+    try {
+      const parsed = JSON.parse(fs.readFileSync(SETTINGS_PATH(), "utf8"));
+      settingsCache = parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      settingsCache = null;
+    }
+  }
+  return settingsCache;
 }
 
 type Bounds = { x: number; y: number; w: number; h: number };
@@ -214,6 +237,12 @@ function createWindow() {
   return win;
 }
 
+// The View-menu sidebar label flips with the persisted flag (C1); the
+// renderer reports it over sidebar:visible and the menu is rebuilt. The
+// Opaque Mode checkbox state is kept across rebuilds.
+let sidebarVisible = true;
+let opaqueModeChecked = false;
+
 function buildMenu() {
   const template: MenuItemConstructorOptions[] = [
     { role: "appMenu" },
@@ -253,12 +282,20 @@ function buildMenu() {
       label: "View",
       submenu: [
         {
+          label: sidebarVisible ? "Hide Sidebar" : "Show Sidebar",
+          click: () => sendToFocused("menu:toggle-sidebar"),
+        },
+        { type: "separator" },
+        {
           // A1 state 3: user-invoked solid surfaces — doubles as the
           // screen-recording mode and the manual accessibility escape hatch.
           label: "Opaque Mode",
           type: "checkbox",
-          checked: false,
-          click: (item) => sendToFocused("menu:opaque-mode", item.checked),
+          checked: opaqueModeChecked,
+          click: (item) => {
+            opaqueModeChecked = item.checked;
+            sendToFocused("menu:opaque-mode", item.checked);
+          },
         },
         { type: "separator" },
         { role: "reload" },
@@ -293,8 +330,15 @@ function buildMenu() {
 }
 
 ipcMain.handle("pty:create", (event, { id, cols, rows, cwd }) => {
-  const shell = process.env.SHELL || "/bin/zsh";
-  const pty = spawn(shell, ["-l"], {
+  // C3: the configured shell applies to new panes only; an invalid path is
+  // not validated here — spawn fails through the existing PTY error path.
+  const settings = readSettingsFile();
+  const configuredShell =
+    settings && typeof settings.shell === "string" && settings.shell.trim() !== ""
+      ? settings.shell
+      : null;
+  const shellPath = configuredShell || process.env.SHELL || "/bin/zsh";
+  const pty = spawn(shellPath, ["-l"], {
     name: "xterm-256color",
     cols: cols ?? 80,
     rows: rows ?? 24,
@@ -374,6 +418,52 @@ ipcMain.on("state:save", (_e, payload: unknown) => {
   } catch (err) {
     console.error("[mandeck] state:save failed", err);
   }
+});
+
+// C3's three settings IPC operations: load, save, open-in-editor.
+ipcMain.handle("settings:load", () => readSettingsFile());
+
+ipcMain.on("settings:save", (_e, payload: unknown) => {
+  if (!payload || typeof payload !== "object") return;
+  settingsCache = payload as Record<string, unknown>;
+  settingsLoaded = true;
+  try {
+    // Immediate, not debounced — settings changes are low-frequency (C3).
+    writeStateFile(SETTINGS_PATH(), payload, true);
+  } catch (err) {
+    console.error("[mandeck] settings:save failed", err);
+  }
+});
+
+ipcMain.handle("settings:open-editor", async () => {
+  const file = SETTINGS_PATH();
+  if (!fs.existsSync(file)) {
+    // Created with defaults only when the user asks for it — never
+    // speculatively at launch (C3). A corrupt file is opened as-is.
+    const doc = defaultSettings(process.env.SHELL || "/bin/zsh");
+    try {
+      writeStateFile(file, doc, true);
+      settingsCache = doc as unknown as Record<string, unknown>;
+      settingsLoaded = true;
+    } catch (err) {
+      console.error("[mandeck] settings file create failed", err);
+      return false;
+    }
+  }
+  const failure = await shell.openPath(file);
+  // No default editor association: fall back to revealing in Finder (C3 §7).
+  if (failure) shell.showItemInFolder(file);
+  return true;
+});
+
+ipcMain.on("sidebar:visible", (_e, visible: unknown) => {
+  if (typeof visible !== "boolean" || visible === sidebarVisible) return;
+  sidebarVisible = visible;
+  buildMenu();
+});
+
+ipcMain.on("app:version", (event) => {
+  event.returnValue = app.getVersion();
 });
 
 ipcMain.handle("drop:stage", (_e, srcPath: string): string => {

@@ -28,11 +28,13 @@ export function writeBackup(filePath, raw, kind) {
   return backupPath;
 }
 
-// Atomic save: temp file + fsync + rename (B3 write hardening).
-export function writeStateFile(filePath, doc) {
+// Atomic save: temp file + fsync + rename (B3 write hardening). settings.json
+// shares this path with pretty=true since it doubles as a hand-edited config
+// file (C3 escape hatch).
+export function writeStateFile(filePath, doc, pretty = false) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tmp = filePath + ".tmp";
-  writeFileWithFsync(tmp, JSON.stringify(doc));
+  writeFileWithFsync(tmp, JSON.stringify(doc, null, pretty ? 2 : undefined));
   fs.renameSync(tmp, filePath);
 }
 

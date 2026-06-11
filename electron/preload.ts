@@ -12,7 +12,8 @@ type MenuChannel =
   | "menu:close-pane"
   | "menu:close-workspace"
   | "menu:prev-workspace"
-  | "menu:next-workspace";
+  | "menu:next-workspace"
+  | "menu:toggle-sidebar";
 
 const api = {
   createPty: (opts: { id: string; cols: number; rows: number; cwd?: string }) =>
@@ -52,6 +53,19 @@ const api = {
 
   loadState: (): Promise<unknown> => ipcRenderer.invoke("state:load"),
   saveState: (payload: unknown) => ipcRenderer.send("state:save", payload),
+
+  // C3 settings IPC + the constants the popover renders (the renderer has no
+  // Node access; the shell default and app version resolve here).
+  loadSettings: (): Promise<unknown> => ipcRenderer.invoke("settings:load"),
+  saveSettings: (payload: unknown) => ipcRenderer.send("settings:save", payload),
+  openSettingsFile: (): Promise<boolean> => ipcRenderer.invoke("settings:open-editor"),
+  defaultShell: process.env.SHELL || "/bin/zsh",
+  appVersion: ipcRenderer.sendSync("app:version") as string,
+
+  // C1: keeps the View-menu "Hide Sidebar"/"Show Sidebar" label in lockstep
+  // with the persisted flag.
+  sidebarVisibleChanged: (visible: boolean) =>
+    ipcRenderer.send("sidebar:visible", visible),
   onQuitFlush: (cb: () => void) => {
     const listener = () => cb();
     ipcRenderer.on("app:quit-flush", listener);

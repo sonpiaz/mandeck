@@ -50,9 +50,14 @@
   /* Standard micro-interaction fills (A1) + A3 chip-specific values */
   --fill-hover: rgba(255, 255, 255, 0.06);
   --fill-hover-soft: rgba(255, 255, 255, 0.05);
+  --fill-pressed: rgba(255, 255, 255, 0.10);
   --border-hover: rgba(255, 255, 255, 0.16);
   --tab-active-border: rgba(255, 255, 255, 0.10);
   --tab-inactive-text: rgb(from var(--text-primary) r g b / 0.70);
+
+  /* Utility rail width (C1, fixed). Drives the maximize-spotlight inset
+     math; collapses to 0 on .app.rail-hidden. */
+  --rail-width: 56px;
 
   /* Tiled noise grain for glass-2/3 only, 3% soft-light (kills banding) */
   --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='128' height='128' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -174,6 +179,17 @@ body {
   height: 100vh;
   display: flex;
   flex-direction: column;
+}
+.app.rail-hidden { --rail-width: 0px; }
+
+/* Row below the titlebar: the workspace area and the utility rail are flex
+   SIBLINGS (C1 hard constraint) — the rail never sits inside a filtered or
+   transformed ancestor, so the drag-dim treatment (scoped to .workspaces)
+   and the maximize scrim (inset to the rail's left edge) both exclude it. */
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
 
 /* ==========================================================================
@@ -382,7 +398,8 @@ body {
    ========================================================================== */
 
 .workspaces {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   position: relative;
 }
@@ -402,11 +419,14 @@ body {
   flex-direction: column;
   box-shadow: inset 0 0 0 1px var(--separator);
 }
+/* Spotlight inset math (C1/D3): the right inset is 32px measured from the
+   rail's left edge — 88px from the window edge while the rail is visible,
+   32px when hidden. */
 .pane.maximized {
   position: fixed !important;
   top: 72px !important;
   left: 32px !important;
-  right: 32px !important;
+  right: calc(32px + var(--rail-width)) !important;
   bottom: 32px !important;
   width: auto !important;
   height: auto !important;
@@ -422,11 +442,14 @@ body {
 .allotment-module_splitViewView__MGZ6O:has(.pane.maximized) {
   transform: none !important;
 }
+/* The scrim covers the workspace region only: below the titlebar, from the
+   window's left edge to the rail's left edge (C1/D3) — the rail keeps normal
+   styling and stays interactive beside it. */
 .pane-maximize-backdrop {
   position: fixed;
   top: 44px;
   left: 0;
-  right: 0;
+  right: var(--rail-width);
   bottom: 0;
   background: var(--glass-3-scrim-fill);
   backdrop-filter: var(--glass-3-scrim-blur);
@@ -637,6 +660,238 @@ body {
   0% { opacity: 1; }
   50% { opacity: 0; }
   100% { opacity: 1; }
+}
+
+/* ==========================================================================
+   Utility rail (C1): 56px glass-1 column below the titlebar, flex sibling
+   of the workspace area. Terminal launcher top, settings gear bottom-pinned.
+   ========================================================================== */
+
+.utility-rail {
+  flex: 0 0 56px;
+  width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px 0;
+  background: var(--glass-1-fill);
+  backdrop-filter: var(--glass-1-blur);
+  -webkit-backdrop-filter: var(--glass-1-blur);
+  border-left: 1px solid var(--separator);
+  box-shadow: inset 0 1px 0 var(--glass-1-rim);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.rail-stretch { flex: 1; }
+
+/* Pointer-inert during pane drags, but visually idle — no dim, no disabled
+   look (C1); the dim filter is scoped to .workspaces, which excludes the
+   rail by construction. Dropping over the rail hits no drop target, so the
+   drag cancels and the pane snaps back. */
+.app.app-dragging-pane .utility-rail { pointer-events: none; }
+
+.rail-item {
+  position: relative;
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-family: inherit;
+  transition: color var(--hover-out) ease-out,
+              transform var(--motion-snappy);
+}
+/* Hover pill: inset 4px from the rail edges, radius --radius-sm (C1). */
+.rail-item::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background-color var(--hover-out) ease-out,
+              border-color var(--hover-out) ease-out;
+}
+.rail-item:hover {
+  color: var(--text-primary);
+  transition-duration: var(--hover-in);
+}
+.rail-item:hover::before {
+  background: var(--fill-hover);
+  border-color: var(--border-hover);
+  transition-duration: var(--hover-in);
+}
+.rail-item:hover .rail-item-label { color: var(--text-primary); }
+.rail-item:active {
+  transform: scale(var(--press-scale));
+  transition: color var(--hover-out) ease-out,
+              transform var(--motion-instant);
+}
+.rail-item:active::before { background: var(--fill-pressed); }
+.rail-item:focus-visible { outline: none; }
+.rail-item:focus-visible::before {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+.rail-item svg { display: block; }
+
+/* 11px is the chrome-text floor (A1); labels are lowercase by design. */
+.rail-item-label {
+  font-size: 11px;
+  text-transform: lowercase;
+  color: var(--text-tertiary);
+  transition: color var(--hover-out) ease-out;
+}
+
+/* ==========================================================================
+   Settings popover (C3): anchored glass-2 panel rendered through the
+   body-level overlay host at z 1050 (D3 layer table) — above the maximize
+   spotlight, below the toast layer.
+   ========================================================================== */
+
+.settings-popover {
+  position: fixed;
+  width: 280px;
+  z-index: 1050;
+  padding: 12px 14px 14px;
+  background: var(--glass-2-fill);
+  backdrop-filter: var(--glass-2-blur);
+  -webkit-backdrop-filter: var(--glass-2-blur);
+  border: 1px solid var(--glass-2-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3), inset 0 1px 0 var(--glass-2-rim);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  overflow: hidden;
+  animation: settings-pop-in var(--motion-instant);
+}
+.settings-popover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--noise);
+  opacity: 0.03;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+@keyframes settings-pop-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes settings-pop-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+}
+
+.settings-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.settings-title { font-size: 13px; font-weight: 600; }
+.settings-version { font-size: 11px; color: var(--text-tertiary); }
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.settings-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.settings-note { font-size: 11px; color: var(--text-tertiary); }
+
+.settings-stepper { display: flex; align-items: center; gap: 10px; }
+.settings-stepper button {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fill-flat);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: background-color var(--hover-out) ease-out;
+}
+.settings-stepper button:hover:not(:disabled) {
+  background: var(--fill-hover);
+  transition-duration: var(--hover-in);
+}
+.settings-stepper button:disabled { opacity: 0.4; cursor: default; }
+.settings-stepper button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+.settings-stepper-value {
+  min-width: 24px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.settings-input {
+  width: 100%;
+  background: var(--fill-flat);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+}
+.settings-input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.settings-edit-config {
+  width: 100%;
+  margin-top: 2px;
+  padding: 7px 0;
+  background: var(--fill-flat);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color var(--hover-out) ease-out,
+              color var(--hover-out) ease-out;
+}
+.settings-edit-config:hover {
+  background: var(--fill-hover);
+  color: var(--text-primary);
+  transition-duration: var(--hover-in);
+}
+.settings-edit-config:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 /* --- Quit confirm toast (glass-2) ----------------------------------------- */

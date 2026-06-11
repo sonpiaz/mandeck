@@ -4,6 +4,7 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import { WorkspaceBar } from "./WorkspaceBar";
 import { PaneGrid } from "./PaneGrid";
 import { PaneDragLayer } from "./PaneDragLayer";
+import { UtilityRail } from "./UtilityRail";
 import {
   PANE_DND_TYPE,
   PERSIST_VERSION,
@@ -19,6 +20,10 @@ import {
   repairV2,
   validateV2,
 } from "../electron/state-schema.mjs";
+import {
+  normalizeSettings,
+  type Settings,
+} from "../electron/settings-schema.mjs";
 
 let _pid = 0;
 let _cid = 0;
@@ -32,21 +37,26 @@ const paneAge = (id: string) => Number(id.slice(1)) || 0;
 
 const MAX_COLS = 5;
 
-const makeWorkspace = (ownedHues: string[]): Workspace => {
+// The settings default accent seeds a fresh state's first workspace and sets
+// the scan-start of the hue rotation for later workspaces (C3, B1).
+const makeWorkspace = (
+  ownedHues: string[],
+  defaultAccent = DEFAULT_ACCENT
+): Workspace => {
   const pid = newPid();
   return {
     id: newWorkspaceId(),
     title: "shell",
     autoNamed: true,
-    accentHue: assignAccentHue(ownedHues, DEFAULT_ACCENT),
+    accentHue: assignAccentHue(ownedHues, defaultAccent),
     cols: [{ cid: newCid(), panes: [pid] }],
     focusedPaneId: pid,
     maximizedPaneId: null,
   };
 };
 
-const initialState = (): AppState => {
-  const ws = makeWorkspace([]);
+const initialState = (defaultAccent = DEFAULT_ACCENT): AppState => {
+  const ws = makeWorkspace([], defaultAccent);
   return {
     workspaces: [ws],
     activeWorkspaceId: ws.id,
@@ -221,35 +231,58 @@ function AppBody() {
   const [quitToast, setQuitToast] = useState<{ until: number } | null>(null);
   const [reducedTransparency, setReducedTransparency] = useState(false);
   const [opaqueMode, setOpaqueMode] = useState(false);
+  const [settings, setSettings] = useState<Settings>(() =>
+    normalizeSettings(null, window.mandeck.defaultShell)
+  );
   const draggingPane = useDragLayer(
     (m) => m.isDragging() && m.getItemType() === PANE_DND_TYPE
   );
   const stateRef = useRef(state);
   stateRef.current = state;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const readyRef = useRef(false);
 
   // ---- Persisted state: load once on mount, debounced save on change. -----
   // The main process owns the load decision table (backup-then-migrate, B3);
-  // the renderer receives either a valid v2 document or null.
+  // the renderer receives either a valid v2 document or null. Settings load
+  // alongside so the default accent can seed hydration and a fresh state
+  // (C3), and so terminals mount with the configured font.
   useEffect(() => {
     let cancelled = false;
-    window.mandeck.loadState().then((raw) => {
-      if (cancelled) return;
-      if (validateV2(raw)) {
-        const repaired = repairV2(raw, DEFAULT_ACCENT);
-        restoreCounters(repaired);
-        setState({
-          workspaces: repaired.workspaces,
-          activeWorkspaceId: repaired.activeWorkspaceId,
-          paneCwds: repaired.paneCwds,
-          sidebarVisible: repaired.sidebarVisible,
-        });
+    Promise.all([window.mandeck.loadState(), window.mandeck.loadSettings()]).then(
+      ([raw, rawSettings]) => {
+        if (cancelled) return;
+        const loaded = normalizeSettings(rawSettings, window.mandeck.defaultShell);
+        setSettings(loaded);
+        settingsRef.current = loaded;
+        if (validateV2(raw)) {
+          const repaired = repairV2(raw, loaded.defaultAccent);
+          restoreCounters(repaired);
+          setState({
+            workspaces: repaired.workspaces,
+            activeWorkspaceId: repaired.activeWorkspaceId,
+            paneCwds: repaired.paneCwds,
+            sidebarVisible: repaired.sidebarVisible,
+          });
+        } else if (loaded.defaultAccent !== DEFAULT_ACCENT) {
+          setState(initialState(loaded.defaultAccent));
+        }
+        setReady(true);
+        readyRef.current = true;
       }
-      setReady(true);
-      readyRef.current = true;
-    });
+    );
     return () => { cancelled = true; };
   }, []);
+
+  // Commit model (C3): each control commits on interaction — save to
+  // settings.json immediately + apply (font live via option mutation in
+  // Terminal, shell to new panes via the main process).
+  const commitSettings = (next: Settings) => {
+    setSettings(next);
+    settingsRef.current = next;
+    window.mandeck.saveSettings(next);
+  };
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -332,7 +365,10 @@ function AppBody() {
 
   const addWorkspace = () => {
     setState((s) => {
-      const ws = makeWorkspace(s.workspaces.map((w) => w.accentHue));
+      const ws = makeWorkspace(
+        s.workspaces.map((w) => w.accentHue),
+        settingsRef.current.defaultAccent
+      );
       return {
         ...s,
         workspaces: [...s.workspaces, ws],
@@ -340,6 +376,9 @@ function AppBody() {
       };
     });
   };
+
+  const toggleSidebar = () =>
+    setState((s) => ({ ...s, sidebarVisible: !s.sidebarVisible }));
 
   const closeWorkspace = (id?: string) => {
     setState((s) => {
@@ -495,11 +534,19 @@ function AppBody() {
       window.mandeck.onMenu("menu:close-workspace", () => closeWorkspace()),
       window.mandeck.onMenu("menu:prev-workspace", () => cycleWorkspace(-1)),
       window.mandeck.onMenu("menu:next-workspace", () => cycleWorkspace(1)),
+      window.mandeck.onMenu("menu:toggle-sidebar", toggleSidebar),
     ];
     return () => {
       offs.forEach((off) => off());
     };
   }, []);
+
+  // Keeps the View-menu "Hide Sidebar"/"Show Sidebar" label in lockstep with
+  // the persisted flag (C1).
+  useEffect(() => {
+    if (!ready) return;
+    window.mandeck.sidebarVisibleChanged(state.sidebarVisible);
+  }, [ready, state.sidebarVisible]);
 
   // ⌘1..⌘9 jump-to-workspace stays a renderer keydown listener (B2)
   useEffect(() => {
@@ -540,7 +587,9 @@ function AppBody() {
 
   return (
     <div
-      className={`app${draggingPane ? " app-dragging-pane" : ""}`}
+      className={`app${draggingPane ? " app-dragging-pane" : ""}${
+        state.sidebarVisible ? "" : " rail-hidden"
+      }`}
       style={accentStyle}
     >
       <div className="titlebar">
@@ -556,25 +605,39 @@ function AppBody() {
         />
         <div className="titlebar-drag-spacer" />
       </div>
-      <div className="workspaces">
-        {state.workspaces.map((ws) => (
-          <PaneGrid
-            key={ws.id}
-            workspaceId={ws.id}
-            cols={ws.cols}
-            focusedPaneId={ws.focusedPaneId}
-            maximizedPaneId={ws.maximizedPaneId}
-            paneCwds={state.paneCwds}
-            accent={ws.accentHue}
-            solidTerminal={solidTerminal}
-            active={ws.id === state.activeWorkspaceId}
-            onFocusPane={focusPane}
-            onClosePane={closePaneById}
-            onToggleMaximize={toggleMaximize}
-            onMovePane={movePane}
-            onPaneCwd={setPaneCwd}
+      <div className="app-body">
+        <div className="workspaces">
+          {state.workspaces.map((ws) => (
+            <PaneGrid
+              key={ws.id}
+              workspaceId={ws.id}
+              cols={ws.cols}
+              focusedPaneId={ws.focusedPaneId}
+              maximizedPaneId={ws.maximizedPaneId}
+              paneCwds={state.paneCwds}
+              accent={ws.accentHue}
+              solidTerminal={solidTerminal}
+              fontFamily={settings.fontFamily}
+              fontSize={settings.fontSize}
+              lineHeight={settings.lineHeight}
+              active={ws.id === state.activeWorkspaceId}
+              onFocusPane={focusPane}
+              onClosePane={closePaneById}
+              onToggleMaximize={toggleMaximize}
+              onMovePane={movePane}
+              onPaneCwd={setPaneCwd}
+            />
+          ))}
+        </div>
+        {state.sidebarVisible && (
+          <UtilityRail
+            accent={activeWorkspace?.accentHue ?? DEFAULT_ACCENT}
+            dragActive={draggingPane}
+            settings={settings}
+            onNewTerminal={addPane}
+            onCommitSettings={commitSettings}
           />
-        ))}
+        )}
       </div>
       {quitToast && (
         <div className="quit-toast" role="status" aria-live="polite">

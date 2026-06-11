@@ -14,7 +14,11 @@ export declare function writeBackup(
   raw: string,
   kind: string
 ): string;
-export declare function writeStateFile(filePath: string, doc: unknown): void;
+export declare function writeStateFile(
+  filePath: string,
+  doc: unknown,
+  pretty?: boolean
+): void;
 export declare function loadStateFile(
   filePath: string,
   defaultAccent?: string

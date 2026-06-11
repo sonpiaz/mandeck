@@ -32,6 +32,9 @@ type Props = {
   initialCwd?: string;
   accent: string;
   solidBg: boolean;
+  fontFamily: string;
+  fontSize: number;
+  lineHeight: number;
   active: boolean;
   focused: boolean;
   maximized: boolean;
@@ -90,6 +93,9 @@ export function Terminal({
   initialCwd,
   accent,
   solidBg,
+  fontFamily,
+  fontSize,
+  lineHeight,
   active,
   focused,
   maximized,
@@ -240,9 +246,12 @@ export function Terminal({
     if (!host) return;
 
     const term = new XTerm({
-      fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace",
-      fontSize: 13,
-      lineHeight: 1.4,
+      // Font values come from settings (C3); the mount-time closure values
+      // are current because terminals only mount after settings load. Later
+      // changes arrive through the live-apply effect below.
+      fontFamily,
+      fontSize,
+      lineHeight,
       cursorBlink: true,
       allowProposedApi: true,
       // Required for the 0.92 alpha background; must be set before open (A2).
@@ -426,6 +435,25 @@ export function Terminal({
     if (!term) return;
     term.options.theme = buildTerminalTheme(accent, solidBg);
   }, [accent, solidBg]);
+
+  // C3 live-apply: font changes mutate xterm options in place and re-fit —
+  // never a remount (a remounted terminal is a dead shell). Dormant
+  // workspaces no-op the fit; B4's activation rAF reconciles them.
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    if (
+      term.options.fontFamily === fontFamily &&
+      term.options.fontSize === fontSize &&
+      term.options.lineHeight === lineHeight
+    ) {
+      return;
+    }
+    term.options.fontFamily = fontFamily;
+    term.options.fontSize = fontSize;
+    term.options.lineHeight = lineHeight;
+    try { fitRef.current?.fit(); } catch { /* hidden container */ }
+  }, [fontFamily, fontSize, lineHeight]);
 
   useEffect(() => {
     if (focused) {

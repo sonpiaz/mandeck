@@ -11,6 +11,9 @@ type Props = {
   paneCwds: Record<string, string>;
   accent: string;
   solidTerminal: boolean;
+  fontFamily: string;
+  fontSize: number;
+  lineHeight: number;
   active: boolean;
   onFocusPane: (pid: string) => void;
   onClosePane: (pid: string) => void;
@@ -29,6 +32,9 @@ export function PaneGrid({
   paneCwds,
   accent,
   solidTerminal,
+  fontFamily,
+  fontSize,
+  lineHeight,
   active,
   onFocusPane,
   onClosePane,
@@ -94,6 +100,9 @@ export function PaneGrid({
                     initialCwd={paneCwds[pid]}
                     accent={accent}
                     solidBg={solidTerminal}
+                    fontFamily={fontFamily}
+                    fontSize={fontSize}
+                    lineHeight={lineHeight}
                     active={active}
                     focused={active && pid === focusedPaneId}
                     maximized={pid === maximizedPaneId}
