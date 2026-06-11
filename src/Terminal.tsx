@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal as XTerm, type ILink } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { useDrag, useDrop } from "react-dnd";
 import { getEmptyImage, NativeTypes } from "react-dnd-html5-backend";
 import { PANE_DND_TYPE, type Edge, type PaneDragItem } from "./types";
+import { buildTerminalTheme } from "./terminal-theme";
 
 function shellQuoteIfNeeded(p: string): string {
   if (!/[\s'"\\$`(){}[\]&;<>*?#!]/.test(p)) return p;
@@ -28,6 +30,8 @@ declare global {
 type Props = {
   id: string;
   initialCwd?: string;
+  accent: string;
+  solidBg: boolean;
   active: boolean;
   focused: boolean;
   maximized: boolean;
@@ -84,6 +88,8 @@ const URL_RE = /https?:\/\/[^\s<>"'`)\]]+/g;
 export function Terminal({
   id,
   initialCwd,
+  accent,
+  solidBg,
   active,
   focused,
   maximized,
@@ -236,34 +242,24 @@ export function Terminal({
     const term = new XTerm({
       fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace",
       fontSize: 13,
-      lineHeight: 1.2,
+      lineHeight: 1.4,
       cursorBlink: true,
       allowProposedApi: true,
-      theme: {
-        background: "#0e1116",
-        foreground: "#e6edf3",
-        cursor: "#2f81f7",
-        black: "#0e1116",
-        red: "#f85149",
-        green: "#3fb950",
-        yellow: "#d29922",
-        blue: "#58a6ff",
-        magenta: "#bc8cff",
-        cyan: "#39c5cf",
-        white: "#b1bac4",
-        brightBlack: "#6e7681",
-        brightRed: "#ff7b72",
-        brightGreen: "#56d364",
-        brightYellow: "#e3b341",
-        brightBlue: "#79c0ff",
-        brightMagenta: "#d2a8ff",
-        brightCyan: "#56d4dd",
-        brightWhite: "#f0f6fc",
-      },
+      // Required for the 0.92 alpha background; must be set before open (A2).
+      allowTransparency: true,
+      theme: buildTerminalTheme(accent, solidBg),
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
+    // A2/D1 canonical triple: WebGL + allowTransparency + 0.92 background.
+    // On context loss the addon is disposed and xterm falls back to its DOM
+    // renderer — the accepted degradation path.
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      term.loadAddon(webgl);
+    } catch { /* WebGL unavailable — DOM renderer */ }
     try { fit.fit(); } catch { /* noop */ }
 
     termRef.current = term;
@@ -422,6 +418,14 @@ export function Terminal({
       fitRef.current = null;
     };
   }, [id]);
+
+  // Theme changes (workspace accent, reduced-transparency/Opaque mode)
+  // mutate xterm options in place — never a remount (INV-10/INV-13).
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.theme = buildTerminalTheme(accent, solidBg);
+  }, [accent, solidBg]);
 
   useEffect(() => {
     if (focused) {

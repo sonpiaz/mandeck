@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { DndProvider, useDragLayer } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { WorkspaceBar } from "./WorkspaceBar";
@@ -219,6 +219,8 @@ function AppBody() {
   const [state, setState] = useState<AppState>(initialState);
   const [ready, setReady] = useState(false);
   const [quitToast, setQuitToast] = useState<{ until: number } | null>(null);
+  const [reducedTransparency, setReducedTransparency] = useState(false);
+  const [opaqueMode, setOpaqueMode] = useState(false);
   const draggingPane = useDragLayer(
     (m) => m.isDragging() && m.getItemType() === PANE_DND_TYPE
   );
@@ -275,6 +277,27 @@ function AppBody() {
       window.mandeck.flushDone();
     });
   }, []);
+
+  // ---- Glass fallbacks (A1/A2): CSS handles its own collapse via the media
+  // query and the data-opaque attribute; the IPC boolean keeps the xterm
+  // theme object (JS, not CSS) in lockstep.
+  useEffect(() => {
+    let cancelled = false;
+    window.mandeck.getReducedTransparency().then((reduced) => {
+      if (!cancelled) setReducedTransparency(reduced);
+    });
+    const off = window.mandeck.onReducedTransparencyChanged(setReducedTransparency);
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+
+  useEffect(() => window.mandeck.onOpaqueMode(setOpaqueMode), []);
+
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-opaque", opaqueMode);
+  }, [opaqueMode]);
 
   // ---- ⌘Q double-press confirm: main fires app:quit-prompt; show toast. ---
   useEffect(() => {
@@ -503,8 +526,23 @@ function AppBody() {
     return <div className="app app-loading" />;
   }
 
+  // The active workspace's persisted accentHue drives the --accent custom
+  // property; the token sheet derives all four sanctioned accent surfaces
+  // from it (A1).
+  const activeWorkspace = state.workspaces.find(
+    (w) => w.id === state.activeWorkspaceId
+  );
+  const accentStyle = {
+    "--accent": activeWorkspace?.accentHue ?? DEFAULT_ACCENT,
+  } as CSSProperties;
+
+  const solidTerminal = reducedTransparency || opaqueMode;
+
   return (
-    <div className={`app${draggingPane ? " app-dragging-pane" : ""}`}>
+    <div
+      className={`app${draggingPane ? " app-dragging-pane" : ""}`}
+      style={accentStyle}
+    >
       <div className="titlebar">
         <div className="titlebar-traffic-spacer" />
         <WorkspaceBar
@@ -516,6 +554,7 @@ function AppBody() {
           onNew={addWorkspace}
           onReorder={reorderWorkspace}
         />
+        <div className="titlebar-drag-spacer" />
       </div>
       <div className="workspaces">
         {state.workspaces.map((ws) => (
@@ -526,6 +565,8 @@ function AppBody() {
             focusedPaneId={ws.focusedPaneId}
             maximizedPaneId={ws.maximizedPaneId}
             paneCwds={state.paneCwds}
+            accent={ws.accentHue}
+            solidTerminal={solidTerminal}
             active={ws.id === state.activeWorkspaceId}
             onFocusPane={focusPane}
             onClosePane={closePaneById}
