@@ -468,6 +468,14 @@ function AppBody() {
     });
   };
 
+  // Files-popover "Choose Folder…": the same native picker as ⌘O, landing
+  // in a file-browser pane instead of a shell.
+  const chooseFilesFolder = () => {
+    void window.mandeck.pickFolder().then((dir) => {
+      if (dir) addFilesPane(dir);
+    });
+  };
+
   const addWorkspace = () => {
     setState((s) => {
       const ws = makeWorkspace(
@@ -818,14 +826,17 @@ function AppBody() {
   }, []);
 
   // ⌘K palette toggle — a renderer keydown listener like ⌘1-9. Closing
-  // returns keyboard focus to the focused pane's terminal: only the active
-  // workspace's focused pane carries .pane.focused, and xterm's helper
-  // textarea is its real focus target.
+  // returns keyboard focus to the focused pane: only the active workspace's
+  // focused pane carries .pane.focused; xterm's helper textarea is a
+  // terminal's real focus target and .files-list is a file-browser pane's
+  // (exactly one of the two exists under the focused pane).
   const closePalette = useCallback(() => {
     setPaletteOpen(false);
     requestAnimationFrame(() => {
       document
-        .querySelector<HTMLTextAreaElement>(".pane.focused .xterm-helper-textarea")
+        .querySelector<HTMLElement>(
+          ".pane.focused .xterm-helper-textarea, .pane.focused .files-list"
+        )
         ?.focus();
     });
   }, []);
@@ -850,7 +861,9 @@ function AppBody() {
     setShortcutsOpen(false);
     requestAnimationFrame(() => {
       document
-        .querySelector<HTMLTextAreaElement>(".pane.focused .xterm-helper-textarea")
+        .querySelector<HTMLElement>(
+          ".pane.focused .xterm-helper-textarea, .pane.focused .files-list"
+        )
         ?.focus();
     });
   }, []);
@@ -948,6 +961,14 @@ function AppBody() {
         run: openFolderInNewPane,
       },
       {
+        id: "new-files-pane",
+        section: "Actions",
+        icon: "folder",
+        title: "New File Browser",
+        subtitle: focusedCwd ? abbreviatePath(focusedCwd, home) : "~",
+        run: () => addFilesPane(),
+      },
+      {
         id: "reveal-cwd",
         section: "Actions",
         icon: "finder",
@@ -1004,6 +1025,18 @@ function AppBody() {
             }
       );
     }
+    // Recent folders (same list the files popover shows) as file-browser
+    // launchers.
+    recentDirs.forEach((dir) => {
+      actions.push({
+        id: `browse-${dir}`,
+        section: "Folders",
+        icon: "folder",
+        title: `Browse ${basenameOf(dir)}`,
+        subtitle: abbreviatePath(dir, home),
+        run: () => addFilesPane(dir),
+      });
+    });
     state.workspaces.forEach((w, i) => {
       actions.push({
         id: `jump-${w.id}`,
@@ -1126,7 +1159,8 @@ function AppBody() {
             openSettingsSignal={settingsSignal}
             onNewTerminal={addPane}
             onNewPaneAt={addPaneWithCwd}
-            onChooseFolder={openFolderInNewPane}
+            onOpenFilesAt={addFilesPane}
+            onChooseFilesFolder={chooseFilesFolder}
             onCommitSettings={commitSettings}
             onSetAccent={setActiveAccent}
             onShowShortcuts={openShortcuts}

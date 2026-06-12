@@ -414,7 +414,7 @@ export function FileBrowser({
           <IconClose />
         </button>
       </div>
-      <div className={`files-toolbar${error ? " has-error" : ""}`}>
+      <div className="files-toolbar">
         <button
           className="pane-btn"
           aria-label="Up one folder"

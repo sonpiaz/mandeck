@@ -13,7 +13,9 @@ type Props = {
   openSettingsSignal: number;
   onNewTerminal: () => void;
   onNewPaneAt: (cwd?: string) => void;
-  onChooseFolder: () => void;
+  // Files-pane launchers consumed by the files popover.
+  onOpenFilesAt: (dir?: string) => void;
+  onChooseFilesFolder: () => void;
   onCommitSettings: (next: Settings) => void;
   onSetAccent: (hue: string) => void;
   onShowShortcuts: () => void;
@@ -76,7 +78,10 @@ const IconGear = () => (
 
 // 56px utility rail (SPEC C1): glass-1 chrome, a flex sibling of the
 // workspace area below the 44px titlebar. Launchers at top (terminal,
-// files), the settings gear bottom-pinned.
+// files), the settings gear bottom-pinned. The files item anchors the
+// file-pane launcher popover (header = browse the focused cwd in a files
+// pane; recents + Choose Folder… open files panes; Open Terminal Here keeps
+// the terminal-at-cwd flow).
 export function UtilityRail({
   accent,
   dragActive,
@@ -86,7 +91,8 @@ export function UtilityRail({
   openSettingsSignal,
   onNewTerminal,
   onNewPaneAt,
-  onChooseFolder,
+  onOpenFilesAt,
+  onChooseFilesFolder,
   onCommitSettings,
   onSetAccent,
   onShowShortcuts,
@@ -190,8 +196,9 @@ export function UtilityRail({
           anchorRef={filesRef}
           focusedCwd={focusedCwd}
           recentDirs={recentDirs}
+          onOpenFilesAt={onOpenFilesAt}
+          onChooseFilesFolder={onChooseFilesFolder}
           onNewPaneAt={onNewPaneAt}
-          onChooseFolder={onChooseFolder}
           onClose={closePopover}
         />
       )}

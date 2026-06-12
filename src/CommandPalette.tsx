@@ -15,7 +15,7 @@ export type PaletteIcon =
 
 export type PaletteAction = {
   id: string;
-  section: "Actions" | "Workspaces";
+  section: "Actions" | "Folders" | "Workspaces";
   icon?: PaletteIcon;
   // Workspace rows show their accentHue as a small dot instead of a glyph.
   dot?: string;
