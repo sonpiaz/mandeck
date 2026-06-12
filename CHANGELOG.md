@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.1 — 2026-06-11
+
+Navigation and workflow polish on top of the Glass redesign.
+
+- Command palette (⌘K): fuzzy-searchable actions for panes, workspaces,
+  and settings from anywhere in the app.
+- Open Folder (⌘O): pick a directory and spawn a pane already cd'd there.
+- Rail files popover: cwd at a glance plus a recent-folders list for
+  one-click reopening.
+- Settings pickers expanded, including accent swatches for per-workspace
+  hues.
+- Abbreviated pane titles keep headers readable in narrow panes.
+- Pane-header context menu with Move to Workspace.
+
 ## 0.1.0 — 2026-06-11 "Glass"
 
 The redesign release. The whole chrome moved to a Liquid Glass design
