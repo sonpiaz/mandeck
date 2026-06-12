@@ -8,7 +8,7 @@ import { getEmptyImage, NativeTypes } from "react-dnd-html5-backend";
 import { PANE_DND_TYPE, type Edge, type PaneDragItem } from "./types";
 import { buildTerminalTheme } from "./terminal-theme";
 import { getOverlayHost } from "./overlay";
-import { basenameOf } from "./paths";
+import { abbreviatePath } from "./paths";
 
 function shellQuoteIfNeeded(p: string): string {
   if (!/[\s'"\\$`(){}[\]&;<>*?#!]/.test(p)) return p;
@@ -130,8 +130,11 @@ export function Terminal({
   const onCwdChangeRef = useRef(onCwdChange);
   useEffect(() => { onCwdChangeRef.current = onCwdChange; }, [onCwdChange]);
 
-  // D1 title fallback chain: cwd basename → OSC 0/2 title → user@host.
-  const title = cwd ? basenameOf(cwd) : oscTitle ?? HOST_LABEL;
+  // D1 title fallback chain: abbreviated cwd path → OSC 0/2 title →
+  // user@host. The native tooltip carries the full untruncated path.
+  const title = cwd
+    ? abbreviatePath(cwd, window.mandeck.homeDir)
+    : oscTitle ?? HOST_LABEL;
 
   // D3 stable per-pane host element: the pane renders exactly once into this
   // manually-owned element (React only ever touches its children, via the
@@ -571,7 +574,7 @@ export function Terminal({
         onMouseDown={handleHeaderMouseDown}
       >
         <span className="pane-header-icon" aria-hidden><IconPane /></span>
-        <span className="pane-header-title" title={title}>{title}</span>
+        <span className="pane-header-title" title={cwd ?? title}>{title}</span>
         <button
           className="pane-btn"
           aria-label={maximized ? "Restore pane" : "Maximize pane"}

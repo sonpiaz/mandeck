@@ -5,6 +5,9 @@ const hostInfo = {
   user: os.userInfo().username,
   host: os.hostname(),
 };
+// Pane-header path abbreviation needs the home prefix; the renderer has no
+// Node access, so it resolves here like hostInfo.
+const homeDir = os.homedir();
 
 type MenuChannel =
   | "menu:new-pane"
@@ -50,6 +53,7 @@ const api = {
   },
 
   hostInfo,
+  homeDir,
   getPathForFile: (file: File): string => {
     try { return webUtils.getPathForFile(file); } catch { return ""; }
   },
