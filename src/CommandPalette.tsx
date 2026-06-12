@@ -9,6 +9,7 @@ export type PaletteIcon =
   | "finder"
   | "gear"
   | "rail"
+  | "keyboard"
   | "maximize"
   | "restore";
 
@@ -75,6 +76,12 @@ const GLYPHS: Record<PaletteIcon, ReactElement> = {
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="1" y="2" width="12" height="10" rx="2" />
       <path d="M9.5 2v10" />
+    </svg>
+  ),
+  keyboard: (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="3.5" width="12" height="7.5" rx="1.5" />
+      <path d="M3.4 6h.01M5.8 6h.01M8.2 6h.01M10.6 6h.01M4.5 8.75h5" />
     </svg>
   ),
   maximize: (

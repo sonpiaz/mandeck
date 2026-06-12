@@ -8,6 +8,7 @@ import { Terminal } from "./Terminal";
 import { PaneDragLayer } from "./PaneDragLayer";
 import { UtilityRail } from "./UtilityRail";
 import { CommandPalette, type PaletteAction } from "./CommandPalette";
+import { ShortcutsPanel } from "./ShortcutsPanel";
 import { getOverlayHost } from "./overlay";
 import { abbreviatePath, basenameOf } from "./paths";
 import {
@@ -257,6 +258,7 @@ function AppBody() {
   // Holds the toast text through the 250ms fade-out (D4).
   const [toastExiting, setToastExiting] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsSignal, setSettingsSignal] = useState(0);
   const [reducedTransparency, setReducedTransparency] = useState(false);
   const [opaqueMode, setOpaqueMode] = useState(false);
@@ -797,6 +799,32 @@ function AppBody() {
     return () => window.removeEventListener("keydown", onKey);
   }, [closePalette]);
 
+  // Keyboard shortcuts viewer (⌘/ toggle, plus the settings-popover row and
+  // the ⌘K palette action). Closing mirrors closePalette: keyboard focus
+  // returns to the focused pane's terminal.
+  const closeShortcuts = useCallback(() => {
+    setShortcutsOpen(false);
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLTextAreaElement>(".pane.focused .xterm-helper-textarea")
+        ?.focus();
+    });
+  }, []);
+  const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
+  const shortcutsOpenRef = useRef(shortcutsOpen);
+  shortcutsOpenRef.current = shortcutsOpen;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return;
+      if (e.key !== "/") return;
+      e.preventDefault();
+      if (shortcutsOpenRef.current) closeShortcuts();
+      else setShortcutsOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closeShortcuts]);
+
   // Palette "Settings": reveal the rail if hidden, then bump the popover
   // signal after the state flush so a just-revealed rail is mounted first.
   const openSettings = () => {
@@ -900,6 +928,15 @@ function AppBody() {
         title: "Toggle Utility Rail",
         subtitle: state.sidebarVisible ? "Hide the right rail" : "Show the right rail",
         run: toggleSidebar,
+      },
+      {
+        id: "shortcuts",
+        section: "Actions",
+        icon: "keyboard",
+        title: "Keyboard Shortcuts",
+        subtitle: "Every binding and gesture",
+        chip: "⌘/",
+        run: openShortcuts,
       },
     ];
     if (ws) {
@@ -1028,12 +1065,14 @@ function AppBody() {
             onChooseFolder={openFolderInNewPane}
             onCommitSettings={commitSettings}
             onSetAccent={setActiveAccent}
+            onShowShortcuts={openShortcuts}
           />
         )}
       </div>
       {paletteOpen && (
         <CommandPalette actions={buildPaletteActions()} onClose={closePalette} />
       )}
+      {shortcutsOpen && <ShortcutsPanel onClose={closeShortcuts} />}
       {(toast || toastExiting !== null) &&
         createPortal(
           <div

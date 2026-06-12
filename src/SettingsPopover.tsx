@@ -25,6 +25,7 @@ type Props = {
   anchorRef: RefObject<HTMLButtonElement | null>;
   onCommit: (next: Settings) => void;
   onSetAccent: (hue: string) => void;
+  onShowShortcuts: () => void;
   onClose: () => void;
 };
 
@@ -66,6 +67,7 @@ export function SettingsPopover({
   anchorRef,
   onCommit,
   onSetAccent,
+  onShowShortcuts,
   onClose,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -257,7 +259,19 @@ export function SettingsPopover({
       <div className="settings-row-note">applies to new panes</div>
       <button
         type="button"
-        className="settings-edit-config"
+        className="settings-footer-btn"
+        onClick={() => {
+          // The panel renders at the same overlay layer; the popover closes
+          // so the two never stack.
+          onShowShortcuts();
+          onClose();
+        }}
+      >
+        Keyboard Shortcuts
+      </button>
+      <button
+        type="button"
+        className="settings-footer-btn"
         onClick={() => {
           void window.mandeck.openSettingsFile();
         }}

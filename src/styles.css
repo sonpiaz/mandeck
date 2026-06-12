@@ -1027,7 +1027,8 @@ body {
   box-shadow: var(--focus-ring);
 }
 
-.settings-edit-config {
+/* Footer buttons: Keyboard Shortcuts above Edit config file… */
+.settings-footer-btn {
   width: 100%;
   margin-top: 2px;
   padding: 7px 0;
@@ -1041,12 +1042,13 @@ body {
   transition: background-color var(--hover-out) ease-out,
               color var(--hover-out) ease-out;
 }
-.settings-edit-config:hover {
+.settings-footer-btn + .settings-footer-btn { margin-top: 6px; }
+.settings-footer-btn:hover {
   background: var(--fill-hover);
   color: var(--text-primary);
   transition-duration: var(--hover-in);
 }
-.settings-edit-config:focus-visible {
+.settings-footer-btn:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
@@ -1372,6 +1374,105 @@ body {
   gap: 6px;
 }
 .cmd-footer-sep { color: var(--text-tertiary); }
+
+/* ==========================================================================
+   Keyboard shortcuts panel (⌘/): glass-2 overlay through the body-level
+   overlay host at the popover/palette layer z 1050 (D3 layer table),
+   anchored upper-center over the workspace area like the command palette.
+   Keycap chips reuse the palette's .cmd-kbd recipe.
+   ========================================================================== */
+
+.shortcuts-panel {
+  position: fixed;
+  top: 80px;
+  left: calc((100% - var(--rail-width)) / 2);
+  transform: translateX(-50%);
+  width: 480px;
+  max-width: calc(100% - 96px);
+  max-height: calc(100% - 160px);
+  display: flex;
+  flex-direction: column;
+  z-index: 1050;
+  background: var(--glass-2-fill);
+  backdrop-filter: var(--glass-2-blur);
+  -webkit-backdrop-filter: var(--glass-2-blur);
+  border: 1px solid var(--glass-2-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3), inset 0 1px 0 var(--glass-2-rim);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  overflow: hidden;
+  /* Programmatically focused while open (Esc target); never ring the panel. */
+  outline: none;
+  animation: shortcuts-pop-in var(--motion-instant);
+}
+.shortcuts-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--noise);
+  opacity: 0.03;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+@keyframes shortcuts-pop-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes shortcuts-pop-in {
+    from { opacity: 0; transform: translate(-50%, 0); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+  }
+}
+
+.shortcuts-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--separator);
+}
+.shortcuts-title { font-size: 13px; font-weight: 600; }
+
+.shortcuts-body {
+  padding: 4px 16px 14px;
+  overflow-y: auto;
+}
+.shortcuts-body::-webkit-scrollbar { display: none; }
+
+/* A1 uppercase section label: 11px / 600 / +0.07em. */
+.shortcuts-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 10px 0 4px;
+}
+
+/* Two columns: keycap chips right-aligned against the description. */
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+.shortcuts-keys {
+  flex: 0 0 148px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.shortcuts-desc {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
 
 /* --- Toast capsule (D4, glass-2): quit confirm + move confirmations -------
    Bottom-center capsule, 24px above the window bottom; toast layer z 1100

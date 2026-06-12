@@ -16,6 +16,7 @@ type Props = {
   onChooseFolder: () => void;
   onCommitSettings: (next: Settings) => void;
   onSetAccent: (hue: string) => void;
+  onShowShortcuts: () => void;
 };
 
 // One anchored popover at a time: opening either item dismisses the other.
@@ -88,6 +89,7 @@ export function UtilityRail({
   onChooseFolder,
   onCommitSettings,
   onSetAccent,
+  onShowShortcuts,
 }: Props) {
   const filesRef = useRef<HTMLButtonElement>(null);
   const gearRef = useRef<HTMLButtonElement>(null);
@@ -201,6 +203,7 @@ export function UtilityRail({
           anchorRef={gearRef}
           onCommit={onCommitSettings}
           onSetAccent={onSetAccent}
+          onShowShortcuts={onShowShortcuts}
           onClose={closePopover}
         />
       )}
