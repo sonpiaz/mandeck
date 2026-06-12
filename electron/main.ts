@@ -344,11 +344,14 @@ ipcMain.handle("pty:create", (event, { id, cols, rows, cwd }) => {
       ? settings.shell
       : null;
   const shellPath = configuredShell || process.env.SHELL || "/bin/zsh";
+  // B3 §7: restored paneCwds may point at deleted directories — node-pty
+  // throws ENOENT on a missing cwd, so fall back to home before spawning.
+  const spawnCwd = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
   const pty = spawn(shellPath, ["-l"], {
     name: "xterm-256color",
     cols: cols ?? 80,
     rows: rows ?? 24,
-    cwd: cwd || os.homedir(),
+    cwd: spawnCwd,
     env: {
       ...process.env,
       TERM: "xterm-256color",
