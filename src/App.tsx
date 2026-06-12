@@ -4,6 +4,7 @@ import { DndProvider, useDragLayer } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { WorkspaceBar } from "./WorkspaceBar";
 import { PaneGrid } from "./PaneGrid";
+import { Terminal } from "./Terminal";
 import { PaneDragLayer } from "./PaneDragLayer";
 import { UtilityRail } from "./UtilityRail";
 import { CommandPalette, type PaletteAction } from "./CommandPalette";
@@ -199,6 +200,21 @@ function closePaneInWorkspace(ws: Workspace, victim: string): Workspace | null {
     maximizedPaneId: ws.maximizedPaneId === victim ? null : ws.maximizedPaneId,
   };
 }
+
+// D2 §7 cap fallback, hoisted with the terminals: a left/right drop at the
+// 5-column cap resolves to a top/bottom insert against the OWNING
+// workspace's columns, so the hover wash never shows a half that lies.
+// Removing the dragged pane frees its column only when it was alone in it.
+const resolveDropEdgeIn =
+  (cols: Col[]) =>
+  (srcPid: string, edge: Edge): Edge => {
+    if (edge === "top" || edge === "bottom") return edge;
+    const remaining = cols.filter(
+      (c) => !(c.panes.length === 1 && c.panes[0] === srcPid)
+    ).length;
+    if (remaining < MAX_COLS) return edge;
+    return edge === "left" ? "top" : "bottom";
+  };
 
 // Files popover recents: unique cwds from the newest panes first (pane ids
 // are monotonic), skipping the focused pane's own directory.
@@ -792,6 +808,16 @@ function AppBody() {
 
   const solidTerminal = reducedTransparency || opaqueMode;
 
+  // Terminals are hoisted out of the per-workspace grids into ONE flat keyed
+  // list so structural changes — column moves, cross-workspace moves, source
+  // workspace closing — never change a terminal's React identity. The grids
+  // render dumb slots; each Terminal re-parents its stable host element into
+  // whichever slot the registry currently maps to its id (D3 pattern,
+  // generalized). A remounted terminal is a dead shell (INV-8/INV-13).
+  const paneRenderList = state.workspaces.flatMap((ws) =>
+    ws.cols.flatMap((c) => c.panes.map((pid) => ({ pid, ws })))
+  );
+
   return (
     <div className={`app${draggingPane ? " app-dragging-pane" : ""}`}>
       <div className="titlebar">
@@ -814,23 +840,31 @@ function AppBody() {
               key={ws.id}
               workspaceId={ws.id}
               cols={ws.cols}
-              focusedPaneId={ws.focusedPaneId}
-              maximizedPaneId={ws.maximizedPaneId}
-              paneCwds={state.paneCwds}
-              accent={ws.accentHue}
-              solidTerminal={solidTerminal}
-              fontFamily={settings.fontFamily}
-              fontSize={settings.fontSize}
-              lineHeight={settings.lineHeight}
               active={ws.id === state.activeWorkspaceId}
-              onFocusPane={focusPane}
-              onClosePane={closePaneById}
-              onToggleMaximize={toggleMaximize}
-              onMovePane={movePane}
-              onPaneCwd={setPaneCwd}
             />
           ))}
         </div>
+        {paneRenderList.map(({ pid, ws }) => (
+          <Terminal
+            key={pid}
+            id={pid}
+            initialCwd={state.paneCwds[pid]}
+            accent={ws.accentHue}
+            solidBg={solidTerminal}
+            fontFamily={settings.fontFamily}
+            fontSize={settings.fontSize}
+            lineHeight={settings.lineHeight}
+            active={ws.id === state.activeWorkspaceId}
+            focused={ws.id === state.activeWorkspaceId && pid === ws.focusedPaneId}
+            maximized={pid === ws.maximizedPaneId}
+            onFocus={() => focusPane(pid)}
+            onClose={() => closePaneById(pid)}
+            onToggleMaximize={() => toggleMaximize(pid)}
+            onMovePane={movePane}
+            onCwdChange={setPaneCwd}
+            resolveDropEdge={resolveDropEdgeIn(ws.cols)}
+          />
+        ))}
         {state.sidebarVisible && (
           <UtilityRail
             accent={activeAccent}

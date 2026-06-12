@@ -1,47 +1,40 @@
 import { useCallback, useEffect, useRef } from "react";
 import { Allotment, type AllotmentHandle } from "allotment";
-import { Terminal } from "./Terminal";
-import { MAX_COLS, type Col, type Edge } from "./types";
+import { clearPaneSlot, setPaneSlot } from "./pane-slots";
+import type { Col } from "./types";
 
 type Props = {
   workspaceId: string;
   cols: Col[];
-  focusedPaneId: string;
-  maximizedPaneId: string | null;
-  paneCwds: Record<string, string>;
-  accent: string;
-  solidTerminal: boolean;
-  fontFamily: string;
-  fontSize: number;
-  lineHeight: number;
   active: boolean;
-  onFocusPane: (pid: string) => void;
-  onClosePane: (pid: string) => void;
-  onToggleMaximize: (pid: string) => void;
-  onMovePane: (src: string, target: string, edge: Edge) => void;
-  onPaneCwd: (pid: string, cwd: string) => void;
 };
 
+// Dumb grid slot: registers itself in the pane-slot registry so the pane's
+// hoisted Terminal (rendered at the App level) can adopt its stable host
+// element here. The ref callback is stable per pid, so registration fires
+// only on mount/unmount — never on plain re-renders.
+function PaneSlot({ pid }: { pid: string }) {
+  const elRef = useRef<HTMLDivElement | null>(null);
+  const ref = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (node) {
+        elRef.current = node;
+        setPaneSlot(pid, node);
+      } else if (elRef.current) {
+        clearPaneSlot(pid, elRef.current);
+        elRef.current = null;
+      }
+    },
+    [pid]
+  );
+  return <div className="pane-grid-slot" ref={ref} />;
+}
+
 // The pane grid one workspace owns. Stays mounted while its workspace is
-// dormant (display:none) — unmounting would kill the terminals' PTYs (B4).
-export function PaneGrid({
-  workspaceId,
-  cols,
-  focusedPaneId,
-  maximizedPaneId,
-  paneCwds,
-  accent,
-  solidTerminal,
-  fontFamily,
-  fontSize,
-  lineHeight,
-  active,
-  onFocusPane,
-  onClosePane,
-  onToggleMaximize,
-  onMovePane,
-  onPaneCwd,
-}: Props) {
+// dormant (display:none) — unmounting would tear down the slots mid-session
+// (B4). Terminals themselves live above the grids (see App's flat pane
+// list), so any structural change here only moves dumb slots around.
+export function PaneGrid({ workspaceId, cols, active }: Props) {
   const totalPanes = cols.reduce((s, c) => s + c.panes.length, 0);
 
   const outerRef = useRef<AllotmentHandle>(null);
@@ -76,23 +69,6 @@ export function PaneGrid({
     return () => cancelAnimationFrame(raf);
   }, [active, cols.length, totalPanes]);
 
-  // D2 §7: a left/right drop at the 5-column cap falls back to a top/bottom
-  // insert in the target column. The wash must show the half that will
-  // actually be used — never a left/right wash that lies — so the same
-  // resolution applies to both the hover hint and the drop itself. Removing
-  // the dragged pane frees its column only when it was alone in it.
-  const resolveDropEdge = useCallback(
-    (srcPid: string, edge: Edge): Edge => {
-      if (edge === "top" || edge === "bottom") return edge;
-      const remaining = cols.filter(
-        (c) => !(c.panes.length === 1 && c.panes[0] === srcPid)
-      ).length;
-      if (remaining < MAX_COLS) return edge;
-      return edge === "left" ? "top" : "bottom";
-    },
-    [cols]
-  );
-
   return (
     <div
       className="workspace"
@@ -111,24 +87,7 @@ export function PaneGrid({
             >
               {col.panes.map((pid) => (
                 <Allotment.Pane key={pid} minSize={80}>
-                  <Terminal
-                    id={pid}
-                    initialCwd={paneCwds[pid]}
-                    accent={accent}
-                    solidBg={solidTerminal}
-                    fontFamily={fontFamily}
-                    fontSize={fontSize}
-                    lineHeight={lineHeight}
-                    active={active}
-                    focused={active && pid === focusedPaneId}
-                    maximized={pid === maximizedPaneId}
-                    onFocus={() => onFocusPane(pid)}
-                    onClose={() => onClosePane(pid)}
-                    onToggleMaximize={() => onToggleMaximize(pid)}
-                    onMovePane={onMovePane}
-                    onCwdChange={onPaneCwd}
-                    resolveDropEdge={resolveDropEdge}
-                  />
+                  <PaneSlot pid={pid} />
                 </Allotment.Pane>
               ))}
             </Allotment>

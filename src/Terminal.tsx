@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Terminal as XTerm, type ILink } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -8,6 +8,7 @@ import { getEmptyImage, NativeTypes } from "react-dnd-html5-backend";
 import { PANE_DND_TYPE, type Edge, type PaneDragItem } from "./types";
 import { buildTerminalTheme } from "./terminal-theme";
 import { getOverlayHost } from "./overlay";
+import { getPaneSlot, subscribePaneSlot } from "./pane-slots";
 import { abbreviatePath } from "./paths";
 
 function shellQuoteIfNeeded(p: string): string {
@@ -139,16 +140,20 @@ export function Terminal({
   // D3 stable per-pane host element: the pane renders exactly once into this
   // manually-owned element (React only ever touches its children, via the
   // portal below); the grid slot and the spotlight frame are dumb slots that
-  // adopt it imperatively. Toggling maximize therefore never changes the
-  // React identity of the terminal — the no-remount rule (INV-8/INV-13).
+  // adopt it imperatively. Toggling maximize — or moving the pane to another
+  // column or workspace — therefore never changes the React identity of the
+  // terminal — the no-remount rule (INV-8/INV-13). The grid slot is looked
+  // up in the pane-slot registry; a subscription re-runs adoption whenever
+  // a grid re-renders the slot somewhere new.
   const paneHostRef = useRef<HTMLDivElement | null>(null);
   if (!paneHostRef.current) {
     const el = document.createElement("div");
     el.className = "pane-host";
     paneHostRef.current = el;
   }
-  const gridSlotRef = useRef<HTMLDivElement | null>(null);
   const spotlightSlotRef = useRef<HTMLDivElement | null>(null);
+  const [slotVersion, bumpSlotVersion] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => subscribePaneSlot(id, bumpSlotVersion), [id]);
 
   // The spotlight (scrim + frame) exists only while this pane is maximized
   // in the ACTIVE workspace — a dormant workspace's persisted maximize is
@@ -178,17 +183,17 @@ export function Terminal({
   useEffect(() => {
     const host = paneHostRef.current;
     if (!host) return;
-    const target = spotlightOn ? spotlightSlotRef.current : gridSlotRef.current;
+    const target = spotlightOn ? spotlightSlotRef.current : getPaneSlot(id);
     if (target && host.parentElement !== target) target.appendChild(host);
-    // Activation/toggle is the resize-reconciliation point (B4/D3): fit in a
-    // rAF once the container has real dimensions. Adopting the host element
-    // may drop the WebGL context; the addon's DOM fallback engages and this
-    // refit repaints.
+    // Activation/toggle/slot-change is the resize-reconciliation point
+    // (B4/D3): fit in a rAF once the container has real dimensions. Adopting
+    // the host element may drop the WebGL context; the addon's DOM fallback
+    // engages and this refit repaints.
     const raf = requestAnimationFrame(() => {
       try { fitRef.current?.fit(); } catch { /* hidden container */ }
     });
     return () => cancelAnimationFrame(raf);
-  }, [spotlightOn, active]);
+  }, [id, spotlightOn, active, slotVersion]);
 
   // --- Pane-as-draggable (header is the handle) -----------------------------
   const [{ isDragging }, dragRef, dragPreview] = useDrag<
@@ -607,12 +612,12 @@ export function Terminal({
     </div>
   );
 
-  // Grid cell slot + body-portal spotlight (scrim z 800, frame z 810 — D3
-  // layer table) + the pane itself, portaled once into the stable host the
-  // slots adopt. The scrim is inert: only the header button toggles.
+  // Body-portal spotlight (scrim z 800, frame z 810 — D3 layer table) + the
+  // pane itself, portaled once into the stable host the slots adopt. The
+  // grid slot lives in the owning workspace's PaneGrid (pane-slot registry).
+  // The scrim is inert: only the header button toggles.
   return (
     <>
-      <div className="pane-grid-slot" ref={gridSlotRef} />
       {(spotlightOn || scrimExiting) &&
         createPortal(
           <>
