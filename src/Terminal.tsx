@@ -298,12 +298,29 @@ export function Terminal({
     const inputDisp = term.onData((data) => {
       window.mandeck.write(id, data);
     });
-    const resizeDisp = term.onResize(({ cols, rows }) => {
-      window.mandeck.resize(id, cols, rows);
+    // PTY resize is debounced (trailing): a live drag re-fits xterm every
+    // frame, but the child process gets exactly ONE SIGWINCH per gesture,
+    // at the final size. Without this, TUI apps (ink/Claude Code) receive a
+    // resize storm mid-stream and re-render dozens of times against a
+    // reflowing buffer — duplicated blocks and dropped characters.
+    let ptyResizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const resizeDisp = term.onResize(() => {
+      if (ptyResizeTimer) clearTimeout(ptyResizeTimer);
+      ptyResizeTimer = setTimeout(() => {
+        ptyResizeTimer = null;
+        if (!disposed) window.mandeck.resize(id, term.cols, term.rows);
+      }, 150);
     });
 
+    // Coalesce ResizeObserver bursts to one fit per frame; the visual grid
+    // tracks the drag live while the PTY only hears the debounced final.
+    let fitRaf = 0;
     const ro = new ResizeObserver(() => {
-      try { fit.fit(); } catch { /* not ready */ }
+      if (fitRaf) return;
+      fitRaf = requestAnimationFrame(() => {
+        fitRaf = 0;
+        try { fit.fit(); } catch { /* not ready */ }
+      });
     });
     ro.observe(host);
 
@@ -411,6 +428,8 @@ export function Terminal({
 
     return () => {
       disposed = true;
+      if (ptyResizeTimer) clearTimeout(ptyResizeTimer);
+      if (fitRaf) cancelAnimationFrame(fitRaf);
       ro.disconnect();
       host.removeEventListener("mousedown", mouseDown);
       host.removeEventListener("contextmenu", onContextMenu);

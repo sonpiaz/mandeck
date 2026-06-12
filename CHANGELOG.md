@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.3 — 2026-06-11
+
+Resize correctness.
+
+- Live drag no longer storms the shell with resize events: xterm re-fits
+  every frame (visual stays smooth), but the PTY receives exactly one
+  SIGWINCH per gesture, at the final size. Fixes duplicated/garbled output
+  from TUI apps (Claude Code and other ink-based UIs) when resizing the
+  window or pane splitters mid-stream.
+- PTY resize dims are clamped to sane integers and failures are logged
+  instead of silently swallowed, so a PTY can no longer get stranded at a
+  stale size.
+
 ## 0.1.2 — 2026-06-11
 
 Pane variety and faster theming.

@@ -1,7 +1,7 @@
 {
   "name": "mandeck",
-  "version": "0.1.2",
-  "description": "A Liquid Glass terminal multiplexer for macOS \u2014 workspaces, tiled panes, and a design that belongs on Tahoe.",
+  "version": "0.1.3",
+  "description": "A Liquid Glass terminal multiplexer for macOS — workspaces, tiled panes, and a design that belongs on Tahoe.",
   "author": "Son Piaz",
   "license": "MIT",
   "repository": {

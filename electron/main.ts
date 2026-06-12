@@ -387,10 +387,15 @@ ipcMain.on("pty:write", (_e, { id, data }) => {
 });
 
 ipcMain.on("pty:resize", (_e, { id, cols, rows }) => {
+  // Clamp to sane integers: a mid-layout fit can propose fractional or
+  // degenerate dims, and node-pty throws on them — which would strand the
+  // PTY at its old size (stale SIGWINCH = TUI apps wrap at a phantom width).
+  const c = Math.max(2, Math.floor(cols) || 0);
+  const r = Math.max(2, Math.floor(rows) || 0);
   try {
-    ptys.get(id)?.resize(cols, rows);
-  } catch {
-    /* PTY may have exited */
+    ptys.get(id)?.resize(c, r);
+  } catch (err) {
+    console.warn(`[mandeck] pty:resize failed id=${id} ${c}x${r}:`, err);
   }
 });
 
