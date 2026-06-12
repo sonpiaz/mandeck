@@ -998,6 +998,193 @@ body {
   box-shadow: var(--focus-ring);
 }
 
+/* ==========================================================================
+   Command palette (⌘K): glass-2 panel through the body-level overlay host,
+   anchored upper-center over the workspace area (the rail is excluded from
+   the centering math, like the spotlight insets). Popover layer z 1050
+   (D3 layer table class — above the spotlight, below toasts).
+   ========================================================================== */
+
+.cmd-palette {
+  position: fixed;
+  top: 80px;
+  left: calc((100% - var(--rail-width)) / 2);
+  transform: translateX(-50%);
+  width: 560px;
+  max-width: calc(100% - 96px);
+  display: flex;
+  flex-direction: column;
+  z-index: 1050;
+  background: var(--glass-2-fill);
+  backdrop-filter: var(--glass-2-blur);
+  -webkit-backdrop-filter: var(--glass-2-blur);
+  border: 1px solid var(--glass-2-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3), inset 0 1px 0 var(--glass-2-rim);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  overflow: hidden;
+  animation: cmd-pop-in var(--motion-instant);
+}
+.cmd-palette::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--noise);
+  opacity: 0.03;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+@keyframes cmd-pop-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes cmd-pop-in {
+    from { opacity: 0; transform: translate(-50%, 0); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+  }
+}
+
+.cmd-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--separator);
+}
+.cmd-search-icon {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+/* The one SF Pro Display moment in the app (A1 typography table). */
+.cmd-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-ui-display);
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  padding: 0;
+}
+.cmd-input::placeholder { color: var(--text-tertiary); }
+
+/* Shared shortcut chip (search row, item rows, footer hints). */
+.cmd-kbd {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: var(--fill-flat);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+  padding: 1px 5px;
+  line-height: 1.4;
+}
+
+.cmd-results {
+  padding: 6px 8px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.cmd-results::-webkit-scrollbar { display: none; }
+
+/* A1 uppercase section label: 11px / 600 / +0.07em. */
+.cmd-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 6px 8px 4px;
+}
+
+.cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+/* Selection reuses the active-chip pill recipe (accent fill at the 8% cap,
+   neutral border) — text and glyphs stay neutral, like chips (A1/A3). */
+.cmd-item.selected {
+  background: var(--accent-fill);
+  border-color: var(--tab-active-border);
+}
+
+.cmd-item-icon {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fill-flat);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+}
+.cmd-item.selected .cmd-item-icon { color: var(--text-primary); }
+.cmd-item-icon svg { display: block; }
+
+/* Workspace rows: the workspace's persisted accentHue as a small dot. */
+.cmd-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}
+
+.cmd-item-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cmd-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmd-item-sub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmd-empty {
+  padding: 14px 8px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.cmd-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-top: 1px solid var(--separator);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.cmd-footer-hints {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cmd-footer-sep { color: var(--text-tertiary); }
+
 /* --- Quit confirm toast (D4, glass-2) -------------------------------------
    Bottom-center capsule, 24px above the window bottom; toast layer z 1100
    (above the spotlight scrim, so the prompt is visible while maximized).

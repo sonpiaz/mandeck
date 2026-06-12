@@ -6,6 +6,8 @@ type Props = {
   accent: string;
   dragActive: boolean;
   settings: Settings;
+  // Bumped by the ⌘K palette's Settings action; each bump opens the popover.
+  openSettingsSignal: number;
   onNewTerminal: () => void;
   onCommitSettings: (next: Settings) => void;
 };
@@ -51,6 +53,7 @@ export function UtilityRail({
   accent,
   dragActive,
   settings,
+  openSettingsSignal,
   onNewTerminal,
   onCommitSettings,
 }: Props) {
@@ -62,11 +65,7 @@ export function UtilityRail({
 
   const closePopover = useCallback(() => setPopoverPos(null), []);
 
-  const togglePopover = () => {
-    if (popoverPos) {
-      setPopoverPos(null);
-      return;
-    }
+  const openPopover = useCallback(() => {
     const rect = gearRef.current?.getBoundingClientRect();
     if (!rect) return;
     // Anchored to the gear, opening up-and-left from the bottom-right corner
@@ -76,7 +75,24 @@ export function UtilityRail({
       right: Math.max(8, Math.round(window.innerWidth - rect.right + 4)),
       bottom: Math.round(window.innerHeight - rect.top + 8),
     });
+  }, []);
+
+  const togglePopover = () => {
+    if (popoverPos) {
+      setPopoverPos(null);
+      return;
+    }
+    openPopover();
   };
+
+  // The mount-time signal value is skipped so re-showing the rail never
+  // re-opens the popover; only a fresh bump from the palette does.
+  const lastSignalRef = useRef(openSettingsSignal);
+  useEffect(() => {
+    if (openSettingsSignal === lastSignalRef.current) return;
+    lastSignalRef.current = openSettingsSignal;
+    openPopover();
+  }, [openSettingsSignal, openPopover]);
 
   // A pane drag starting dismisses the popover (C3 dismissal list); the rail
   // itself goes pointer-inert via CSS for the drag's duration (C1). Hiding

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DndProvider, useDragLayer } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
@@ -6,8 +6,9 @@ import { WorkspaceBar } from "./WorkspaceBar";
 import { PaneGrid } from "./PaneGrid";
 import { PaneDragLayer } from "./PaneDragLayer";
 import { UtilityRail } from "./UtilityRail";
+import { CommandPalette, type PaletteAction } from "./CommandPalette";
 import { getOverlayHost } from "./overlay";
-import { basenameOf } from "./paths";
+import { abbreviatePath, basenameOf } from "./paths";
 import {
   MAX_COLS,
   PANE_DND_TYPE,
@@ -221,6 +222,8 @@ function AppBody() {
   const [ready, setReady] = useState(false);
   const [quitToast, setQuitToast] = useState<{ until: number } | null>(null);
   const [toastExiting, setToastExiting] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [settingsSignal, setSettingsSignal] = useState(0);
   const [reducedTransparency, setReducedTransparency] = useState(false);
   const [opaqueMode, setOpaqueMode] = useState(false);
   const [settings, setSettings] = useState<Settings>(() =>
@@ -599,6 +602,39 @@ function AppBody() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // ⌘K palette toggle — a renderer keydown listener like ⌘1-9. Closing
+  // returns keyboard focus to the focused pane's terminal: only the active
+  // workspace's focused pane carries .pane.focused, and xterm's helper
+  // textarea is its real focus target.
+  const closePalette = useCallback(() => {
+    setPaletteOpen(false);
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLTextAreaElement>(".pane.focused .xterm-helper-textarea")
+        ?.focus();
+    });
+  }, []);
+  const paletteOpenRef = useRef(paletteOpen);
+  paletteOpenRef.current = paletteOpen;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return;
+      if (e.key !== "k" && e.key !== "K") return;
+      e.preventDefault();
+      if (paletteOpenRef.current) closePalette();
+      else setPaletteOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closePalette]);
+
+  // Palette "Settings": reveal the rail if hidden, then bump the popover
+  // signal after the state flush so a just-revealed rail is mounted first.
+  const openSettings = () => {
+    setState((s) => (s.sidebarVisible ? s : { ...s, sidebarVisible: true }));
+    setTimeout(() => setSettingsSignal((n) => n + 1), 0);
+  };
+
   // The active workspace's persisted accentHue drives the --accent custom
   // property; the token sheet derives all four sanctioned accent surfaces
   // from it (A1). Set on the document root so the body-level overlay host
@@ -627,6 +663,105 @@ function AppBody() {
     title: w.title,
     autoNamed: w.autoNamed,
   }));
+
+  // ⌘K action list, rebuilt from live state on every palette render so
+  // subtitles (pane landing spot, cwd, rail visibility) stay current.
+  const buildPaletteActions = (): PaletteAction[] => {
+    const ws = activeWorkspace;
+    const home = window.mandeck.homeDir;
+    const focusedCwd = ws ? state.paneCwds[ws.focusedPaneId] : undefined;
+    const actions: PaletteAction[] = [
+      {
+        id: "new-pane",
+        section: "Actions",
+        icon: "terminal",
+        title: "New Terminal Pane",
+        subtitle:
+          ws && ws.cols.length >= MAX_COLS
+            ? "Joins the column with the fewest panes"
+            : "Opens as a new column on the right",
+        chip: "⌘N",
+        run: addPane,
+      },
+      {
+        id: "new-workspace",
+        section: "Actions",
+        icon: "workspace",
+        title: "New Workspace",
+        subtitle: "Opens at the end of the strip",
+        chip: "⌘T",
+        run: addWorkspace,
+      },
+      {
+        id: "open-folder",
+        section: "Actions",
+        icon: "folder",
+        title: "Open Folder in New Pane…",
+        subtitle: "Pick a directory for a fresh shell",
+        chip: "⌘O",
+        run: openFolderInNewPane,
+      },
+      {
+        id: "reveal-cwd",
+        section: "Actions",
+        icon: "finder",
+        title: "Open Current Folder in Finder",
+        subtitle: focusedCwd ? abbreviatePath(focusedCwd, home) : "~",
+        run: () => {
+          void window.mandeck.openDirInFinder(focusedCwd ?? home);
+        },
+      },
+      {
+        id: "settings",
+        section: "Actions",
+        icon: "gear",
+        title: "Settings",
+        subtitle: "Open the settings popover",
+        run: openSettings,
+      },
+      {
+        id: "toggle-rail",
+        section: "Actions",
+        icon: "rail",
+        title: "Toggle Utility Rail",
+        subtitle: state.sidebarVisible ? "Hide the right rail" : "Show the right rail",
+        run: toggleSidebar,
+      },
+    ];
+    if (ws) {
+      actions.push(
+        ws.maximizedPaneId
+          ? {
+              id: "exit-maximize",
+              section: "Actions",
+              icon: "restore",
+              title: "Exit Maximize",
+              subtitle: "Restore the pane grid",
+              run: () => toggleMaximize(ws.maximizedPaneId!),
+            }
+          : {
+              id: "maximize",
+              section: "Actions",
+              icon: "maximize",
+              title: "Maximize Focused Pane",
+              subtitle: "Spotlight the focused pane",
+              run: () => toggleMaximize(ws.focusedPaneId),
+            }
+      );
+    }
+    state.workspaces.forEach((w, i) => {
+      actions.push({
+        id: `jump-${w.id}`,
+        section: "Workspaces",
+        dot: w.accentHue,
+        title: `Jump to ${w.title}`,
+        subtitle: `Workspace ${i + 1}`,
+        chip: i < 9 ? `⌘${i + 1}` : undefined,
+        run: () => switchWorkspace(w.id),
+      });
+    });
+    return actions;
+  };
 
   if (!ready) {
     // Avoid spawning PTYs before we know whether to restore a saved layout.
@@ -679,11 +814,15 @@ function AppBody() {
             accent={activeAccent}
             dragActive={draggingPane}
             settings={settings}
+            openSettingsSignal={settingsSignal}
             onNewTerminal={addPane}
             onCommitSettings={commitSettings}
           />
         )}
       </div>
+      {paletteOpen && (
+        <CommandPalette actions={buildPaletteActions()} onClose={closePalette} />
+      )}
       {(quitToast || toastExiting) &&
         createPortal(
           <div

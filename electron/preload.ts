@@ -45,6 +45,8 @@ const api = {
   // Open Folder… (File menu / ⌘K palette): the main process owns the native
   // directory picker; the chosen path feeds the cwd-threaded addPane variant.
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke("dialog:pick-folder"),
+  openDirInFinder: (dir: string): Promise<boolean> =>
+    ipcRenderer.invoke("dir:open-in-finder", dir),
 
   onMenu: (channel: MenuChannel, cb: () => void) => {
     const listener = () => cb();

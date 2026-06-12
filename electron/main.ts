@@ -506,6 +506,19 @@ ipcMain.handle("dialog:pick-folder", async (event) => {
   return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0];
 });
 
+// ⌘K palette "Open Current Folder in Finder": directories only, validated
+// here because the renderer's paneCwds entry may point at a deleted path.
+ipcMain.handle("dir:open-in-finder", (_e, dir: unknown) => {
+  if (typeof dir !== "string" || dir === "") return false;
+  try {
+    if (!fs.statSync(dir).isDirectory()) return false;
+  } catch {
+    return false;
+  }
+  void shell.openPath(dir);
+  return true;
+});
+
 ipcMain.handle("shell:openExternal", (_e, url: string) => {
   if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return false;
   shell.openExternal(url).catch(() => {});
