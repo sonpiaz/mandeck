@@ -19,6 +19,12 @@ type MenuChannel =
   | "menu:next-workspace"
   | "menu:toggle-sidebar";
 
+type PaneMenuAction = {
+  paneId: string;
+  action: "move" | "move-new" | "toggle-maximize" | "close";
+  targetId?: string;
+};
+
 const api = {
   createPty: (opts: { id: string; cols: number; rows: number; cwd?: string }) =>
     ipcRenderer.invoke("pty:create", opts),
@@ -118,6 +124,23 @@ const api = {
     const listener = () => cb();
     ipcRenderer.on("ctx-menu:paste", listener);
     return () => ipcRenderer.removeListener("ctx-menu:paste", listener);
+  },
+
+  // Pane-header context menu: the renderer sends a snapshot (pane id, the
+  // owning workspace's maximize state, move targets); main pops a native
+  // menu and the chosen action returns over pane-menu:action.
+  showPaneMenu: (payload: {
+    paneId: string;
+    maximized: boolean;
+    targets: { id: string; title: string }[];
+    canMoveToNew: boolean;
+  }) => ipcRenderer.send("pane-menu:show", payload),
+  onPaneMenuAction: (cb: (a: PaneMenuAction) => void) => {
+    const listener = (_: unknown, a: PaneMenuAction) => cb(a);
+    ipcRenderer.on("pane-menu:action", listener);
+    return () => {
+      ipcRenderer.removeListener("pane-menu:action", listener);
+    };
   },
 };
 

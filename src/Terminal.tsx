@@ -45,6 +45,7 @@ type Props = {
   onFocus: () => void;
   onClose: () => void;
   onToggleMaximize: () => void;
+  onHeaderContextMenu: () => void;
   onMovePane: (src: string, target: string, edge: Edge) => void;
   onCwdChange: (pid: string, cwd: string) => void;
   resolveDropEdge: (srcPid: string, edge: Edge) => Edge;
@@ -115,6 +116,7 @@ export function Terminal({
   onFocus,
   onClose,
   onToggleMaximize,
+  onHeaderContextMenu,
   onMovePane,
   onCwdChange,
   resolveDropEdge,
@@ -577,6 +579,10 @@ export function Terminal({
         className="pane-header"
         ref={headerDragRef}
         onMouseDown={handleHeaderMouseDown}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onHeaderContextMenu();
+        }}
       >
         <span className="pane-header-icon" aria-hidden><IconPane /></span>
         <span className="pane-header-title" title={cwd ?? title}>{title}</span>

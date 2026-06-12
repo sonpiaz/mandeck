@@ -546,6 +546,56 @@ ipcMain.handle(
   () => nativeTheme.prefersReducedTransparency
 );
 
+// Pane-header context menu (owner feature): the renderer snapshots pane id,
+// maximize state, and the move targets; the menu is native (Menu.popup) and
+// the chosen action returns over pane-menu:action so the renderer runs its
+// existing state-update paths.
+ipcMain.on(
+  "pane-menu:show",
+  (
+    event,
+    payload: {
+      paneId: string;
+      maximized: boolean;
+      targets: { id: string; title: string }[];
+      canMoveToNew: boolean;
+    }
+  ) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    const { paneId, maximized, targets, canMoveToNew } = payload;
+    const act = (action: string, targetId?: string) =>
+      event.sender.send("pane-menu:action", { paneId, action, targetId });
+    const moveItems: MenuItemConstructorOptions[] = targets.map((t) => ({
+      label: t.title,
+      click: () => act("move", t.id),
+    }));
+    if (moveItems.length > 0) moveItems.push({ type: "separator" });
+    moveItems.push({
+      label: "New Workspace",
+      enabled: canMoveToNew,
+      click: () => act("move-new"),
+    });
+    const items: MenuItemConstructorOptions[] = [
+      {
+        label: "Move to Workspace",
+        enabled: targets.length > 0 || canMoveToNew,
+        submenu: moveItems,
+      },
+      { type: "separator" },
+      {
+        label: maximized ? "Restore" : "Maximize",
+        click: () => act("toggle-maximize"),
+      },
+      {
+        label: "Close Pane",
+        click: () => act("close"),
+      },
+    ];
+    Menu.buildFromTemplate(items).popup({ window: win });
+  }
+);
+
 ipcMain.on("ctx-menu:show", (event, { url, selection }: { url?: string; selection?: string }) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;

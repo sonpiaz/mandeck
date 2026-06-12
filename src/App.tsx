@@ -253,8 +253,9 @@ export function App() {
 function AppBody() {
   const [state, setState] = useState<AppState>(initialState);
   const [ready, setReady] = useState(false);
-  const [quitToast, setQuitToast] = useState<{ until: number } | null>(null);
-  const [toastExiting, setToastExiting] = useState(false);
+  const [toast, setToast] = useState<{ text: string; until: number } | null>(null);
+  // Holds the toast text through the 250ms fade-out (D4).
+  const [toastExiting, setToastExiting] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsSignal, setSettingsSignal] = useState(0);
   const [reducedTransparency, setReducedTransparency] = useState(false);
@@ -360,36 +361,39 @@ function AppBody() {
     document.documentElement.toggleAttribute("data-opaque", opaqueMode);
   }, [opaqueMode]);
 
-  // ---- ⌘Q double-press confirm: main fires app:quit-prompt; show toast. ---
-  // Re-arming while visible restarts the window without replaying the
-  // entrance (the element stays mounted); expiry plays a 250ms fade-out
-  // before unmounting (D4).
+  // ---- Toast capsule (D4): quit confirm + move confirmations. ------------
+  // One toast at a time; re-arming while visible restarts the window without
+  // replaying the entrance (the element stays mounted); expiry plays a 250ms
+  // fade-out before unmounting.
+  const showToast = useCallback((text: string, windowMs = 2000) => {
+    setToastExiting(null);
+    setToast({ text, until: Date.now() + windowMs });
+  }, []);
   useEffect(() => {
     const off = window.mandeck.onQuitPrompt((windowMs) => {
-      setToastExiting(false);
-      setQuitToast({ until: Date.now() + windowMs });
+      showToast("Press ⌘Q again to quit Mandeck", windowMs);
     });
     return () => {
       off();
     };
-  }, []);
+  }, [showToast]);
   useEffect(() => {
-    if (!quitToast) return;
+    if (!toast) return;
     const expire = () => {
-      setQuitToast(null);
-      setToastExiting(true);
+      setToast(null);
+      setToastExiting(toast.text);
     };
-    const remaining = quitToast.until - Date.now();
+    const remaining = toast.until - Date.now();
     if (remaining <= 0) {
       expire();
       return;
     }
     const t = setTimeout(expire, remaining);
     return () => clearTimeout(t);
-  }, [quitToast]);
+  }, [toast]);
   useEffect(() => {
-    if (!toastExiting) return;
-    const t = setTimeout(() => setToastExiting(false), 250);
+    if (toastExiting === null) return;
+    const t = setTimeout(() => setToastExiting(null), 250);
     return () => clearTimeout(t);
   }, [toastExiting]);
 
@@ -517,6 +521,116 @@ function AppBody() {
     updateActiveWorkspace((w) => movePaneInWorkspace(w, srcPid, targetPid, edge));
   };
 
+  // Cross-workspace move (pane-header menu + ⌘K palette), one setState:
+  // the source side runs the existing close cascade (empty-column collapse,
+  // max-suffix focus repair, maximize clear) and the target side runs the
+  // existing add-pane placement, focused there. The terminal survives
+  // because Terminal instances live in the flat keyed pane list — only dumb
+  // slots re-render and the stable host is re-adopted. An emptied source
+  // closes per the existing workspace-close rules (a target always exists);
+  // the active workspace is never auto-switched otherwise. paneCwds is a
+  // global map, so the moved pane's cwd entry is untouched.
+  const movePaneToWorkspace = (pid: string, targetId: string) => {
+    const cur = stateRef.current;
+    const src = cur.workspaces.find((w) =>
+      w.cols.some((c) => c.panes.includes(pid))
+    );
+    const target = cur.workspaces.find((w) => w.id === targetId);
+    if (!src || !target || src.id === targetId) return;
+    setState((s) => {
+      const from = s.workspaces.find((w) =>
+        w.cols.some((c) => c.panes.includes(pid))
+      );
+      if (!from || from.id === targetId) return s;
+      if (!s.workspaces.some((w) => w.id === targetId)) return s;
+      const removed = closePaneInWorkspace(from, pid);
+      let workspaces = s.workspaces.map((w) => {
+        if (w.id === from.id) return removed ?? w;
+        if (w.id === targetId) return addPaneToWorkspace(w, pid);
+        return w;
+      });
+      let activeWorkspaceId = s.activeWorkspaceId;
+      if (removed === null) {
+        const idx = workspaces.findIndex((w) => w.id === from.id);
+        workspaces = workspaces.filter((w) => w.id !== from.id);
+        if (activeWorkspaceId === from.id) {
+          activeWorkspaceId = workspaces[Math.min(idx, workspaces.length - 1)].id;
+        }
+      }
+      return { ...s, workspaces, activeWorkspaceId };
+    });
+    showToast(`Moved to ${target.title}`);
+  };
+
+  // "New Workspace" menu item: create a workspace at the end of the strip
+  // and move the pane there. A sole pane in a sole workspace is a no-op
+  // (the menu disables it); otherwise the same move semantics apply, with
+  // the new workspace appended before an emptied source closes.
+  const movePaneToNewWorkspace = (pid: string) => {
+    const cur = stateRef.current;
+    const src = cur.workspaces.find((w) =>
+      w.cols.some((c) => c.panes.includes(pid))
+    );
+    if (!src) return;
+    const srcPaneCount = src.cols.reduce((n, c) => n + c.panes.length, 0);
+    if (cur.workspaces.length === 1 && srcPaneCount === 1) return;
+    const cwd = cur.paneCwds[pid];
+    const title = cwd ? basenameOf(cwd) : "shell";
+    setState((s) => {
+      const from = s.workspaces.find((w) =>
+        w.cols.some((c) => c.panes.includes(pid))
+      );
+      if (!from) return s;
+      const ws: Workspace = {
+        id: newWorkspaceId(),
+        title,
+        autoNamed: true,
+        accentHue: assignAccentHue(
+          s.workspaces.map((w) => w.accentHue),
+          settingsRef.current.defaultAccent
+        ),
+        cols: [{ cid: newCid(), panes: [pid] }],
+        focusedPaneId: pid,
+        maximizedPaneId: null,
+      };
+      const removed = closePaneInWorkspace(from, pid);
+      let workspaces = [
+        ...s.workspaces.map((w) => (w.id === from.id ? (removed ?? w) : w)),
+        ws,
+      ];
+      let activeWorkspaceId = s.activeWorkspaceId;
+      if (removed === null) {
+        const idx = workspaces.findIndex((w) => w.id === from.id);
+        workspaces = workspaces.filter((w) => w.id !== from.id);
+        if (activeWorkspaceId === from.id) {
+          activeWorkspaceId = workspaces[Math.min(idx, workspaces.length - 1)].id;
+        }
+      }
+      return { ...s, workspaces, activeWorkspaceId };
+    });
+    showToast(`Moved to ${title}`);
+  };
+
+  // Right-click on a pane header: snapshot the pane's menu inputs and let
+  // the main process pop a native menu (Menu.popup). The chosen action
+  // returns over pane-menu:action below.
+  const openPaneMenu = (pid: string) => {
+    const s = stateRef.current;
+    const src = s.workspaces.find((w) =>
+      w.cols.some((c) => c.panes.includes(pid))
+    );
+    if (!src) return;
+    const srcPaneCount = src.cols.reduce((n, c) => n + c.panes.length, 0);
+    window.mandeck.showPaneMenu({
+      paneId: pid,
+      maximized: src.maximizedPaneId === pid,
+      targets: s.workspaces
+        .filter((w) => w.id !== src.id)
+        .map((w) => ({ id: w.id, title: w.title })),
+      canMoveToNew: !(s.workspaces.length === 1 && srcPaneCount === 1),
+    });
+  };
+
   // OSC 7 cwd report. Beyond persisting the cwd, this drives B1's
   // auto-rename rule: an auto-named workspace whose FOCUSED pane reports a
   // cwd retitles to the cwd's basename — dormant workspaces included.
@@ -612,6 +726,19 @@ function AppBody() {
     return () => {
       offs.forEach((off) => off());
     };
+  }, []);
+
+  // Pane-menu actions run the same handlers as the header buttons / ⌘W.
+  // Subscribed once like the menu IPC above: every handler reads through
+  // stateRef/settingsRef or functional setState, so the captured closures
+  // never go stale.
+  useEffect(() => {
+    return window.mandeck.onPaneMenuAction(({ paneId, action, targetId }) => {
+      if (action === "move" && targetId) movePaneToWorkspace(paneId, targetId);
+      else if (action === "move-new") movePaneToNewWorkspace(paneId);
+      else if (action === "toggle-maximize") toggleMaximize(paneId);
+      else if (action === "close") closePaneById(paneId);
+    });
   }, []);
 
   // Keeps the View-menu "Hide Sidebar"/"Show Sidebar" label in lockstep with
@@ -798,6 +925,19 @@ function AppBody() {
         run: () => switchWorkspace(w.id),
       });
     });
+    if (ws) {
+      state.workspaces.forEach((w) => {
+        if (w.id === ws.id) return;
+        actions.push({
+          id: `move-pane-${w.id}`,
+          section: "Workspaces",
+          dot: w.accentHue,
+          title: `Move Focused Pane to ${w.title}`,
+          subtitle: "The shell keeps running",
+          run: () => movePaneToWorkspace(ws.focusedPaneId, w.id),
+        });
+      });
+    }
     return actions;
   };
 
@@ -860,6 +1000,7 @@ function AppBody() {
             onFocus={() => focusPane(pid)}
             onClose={() => closePaneById(pid)}
             onToggleMaximize={() => toggleMaximize(pid)}
+            onHeaderContextMenu={() => openPaneMenu(pid)}
             onMovePane={movePane}
             onCwdChange={setPaneCwd}
             resolveDropEdge={resolveDropEdgeIn(ws.cols)}
@@ -883,14 +1024,14 @@ function AppBody() {
       {paletteOpen && (
         <CommandPalette actions={buildPaletteActions()} onClose={closePalette} />
       )}
-      {(quitToast || toastExiting) &&
+      {(toast || toastExiting !== null) &&
         createPortal(
           <div
-            className={`quit-toast${quitToast ? "" : " exiting"}`}
+            className={`toast${toast ? "" : " exiting"}`}
             role="status"
             aria-live="polite"
           >
-            Press ⌘Q again to quit Mandeck
+            {toast?.text ?? toastExiting}
           </div>,
           getOverlayHost()
         )}

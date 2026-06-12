@@ -1372,12 +1372,12 @@ body {
 }
 .cmd-footer-sep { color: var(--text-tertiary); }
 
-/* --- Quit confirm toast (D4, glass-2) -------------------------------------
+/* --- Toast capsule (D4, glass-2): quit confirm + move confirmations -------
    Bottom-center capsule, 24px above the window bottom; toast layer z 1100
    (above the spotlight scrim, so the prompt is visible while maximized).
    Click-through; one toast at a time. Enter: 8px upward slide + fade on
    motion-snappy. Exit: 250ms fade via .exiting. No grain (small control). */
-.quit-toast {
+.toast {
   position: fixed;
   left: 50%;
   bottom: 24px;
@@ -1396,15 +1396,15 @@ body {
   z-index: 1100;
   pointer-events: none;
   transition: opacity 250ms ease-out;
-  animation: quit-toast-in var(--motion-snappy);
+  animation: toast-in var(--motion-snappy);
 }
-.quit-toast.exiting { opacity: 0; }
-@keyframes quit-toast-in {
+.toast.exiting { opacity: 0; }
+@keyframes toast-in {
   from { opacity: 0; transform: translate(-50%, 8px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  @keyframes quit-toast-in {
+  @keyframes toast-in {
     from { opacity: 0; transform: translate(-50%, 0); }
     to   { opacity: 1; transform: translate(-50%, 0); }
   }
