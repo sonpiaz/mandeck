@@ -997,9 +997,10 @@ body {
   box-shadow: var(--focus-ring);
 }
 
-/* The 7-hue workspace palette as round swatches (defaultAccent picker).
-   Swatch fills are the A1 --hue-* values, passed inline from the canonical
-   ACCENT_HUES rotation like the palette's workspace dots. */
+/* The 7-hue workspace palette as round swatches: shows and retints the
+   active workspace's accentHue. Swatch fills are the A1 --hue-* values,
+   passed inline from the canonical ACCENT_HUES rotation like the palette's
+   workspace dots. */
 .settings-swatch-row {
   display: flex;
   align-items: center;

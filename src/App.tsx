@@ -707,6 +707,15 @@ function AppBody() {
     updateActiveWorkspace((w) => ({ ...w, focusedPaneId: pid }));
   };
 
+  // Settings-popover accent swatches retint the ACTIVE workspace (owner
+  // ruling, supersedes B1's immutability): the change is instantly visible on
+  // all four accent surfaces (focus ring, active chip, drop wash, cursor) and
+  // persists via the normal debounced save. New workspaces keep the B1
+  // auto-rotation seeded by settings.defaultAccent (file-only now).
+  const setActiveAccent = (hue: string) => {
+    updateActiveWorkspace((w) => ({ ...w, accentHue: hue }));
+  };
+
   // Menu IPC listeners, subscribed once ([] deps). The captured handlers stay
   // valid forever: every mutation goes through setState functional updaters
   // (no stale-state reads), and the one non-state read — addWorkspace's
@@ -1018,6 +1027,7 @@ function AppBody() {
             onNewPaneAt={addPaneWithCwd}
             onChooseFolder={openFolderInNewPane}
             onCommitSettings={commitSettings}
+            onSetAccent={setActiveAccent}
           />
         )}
       </div>

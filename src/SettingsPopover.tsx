@@ -24,6 +24,7 @@ type Props = {
   settings: Settings;
   anchorRef: RefObject<HTMLButtonElement | null>;
   onCommit: (next: Settings) => void;
+  onSetAccent: (hue: string) => void;
   onClose: () => void;
 };
 
@@ -54,14 +55,17 @@ const HUE_NAMES = ["Green", "Teal", "Blue", "Purple", "Red", "Orange", "Yellow"]
 // terminals keep running behind it. Renders through the body-level overlay
 // host at z 1050 so it sits above the maximize spotlight (D3 layer table).
 // Each control commits on interaction; there is no Save/Cancel. Font changes
-// live-apply by option mutation in Terminal (never a remount); shell and
-// default accent apply to new panes / new workspaces only.
+// live-apply by option mutation in Terminal (never a remount); shell applies
+// to new panes only. The accent swatches show and retint the ACTIVE
+// workspace's accentHue — instantly visible, persisted with app state;
+// settings.defaultAccent stays file-only as the new-workspace rotation seed.
 export function SettingsPopover({
   accent,
   position,
   settings,
   anchorRef,
   onCommit,
+  onSetAccent,
   onClose,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -221,19 +225,17 @@ export function SettingsPopover({
               key={hue}
               type="button"
               role="radio"
-              aria-checked={settings.defaultAccent === hue}
+              aria-checked={accent === hue}
               aria-label={HUE_NAMES[i]}
               title={HUE_NAMES[i]}
-              className={`settings-swatch${
-                settings.defaultAccent === hue ? " selected" : ""
-              }`}
+              className={`settings-swatch${accent === hue ? " selected" : ""}`}
               style={{ background: hue }}
-              onClick={() => commit({ defaultAccent: hue })}
+              onClick={() => onSetAccent(hue)}
             />
           ))}
         </div>
       </div>
-      <div className="settings-row-note">seeds new workspaces</div>
+      <div className="settings-row-note">accent of this workspace</div>
       <div className="settings-section-label">Terminal</div>
       <div className="settings-row">
         <label className="settings-row-label" htmlFor="settings-shell">
