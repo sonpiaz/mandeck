@@ -15,6 +15,20 @@
   <sub>Design render of the v0.1 glass chrome (Variant A — Liquid Glass).</sub>
 </p>
 
+## Install
+
+Grab `Mandeck.app` from the
+[latest release](https://github.com/sonpiaz/mandeck/releases/latest)
+(Apple Silicon), drop it into `/Applications`, then clear the quarantine
+flag — the build is not notarized yet:
+
+```bash
+xattr -cr /Applications/Mandeck.app
+```
+
+Or build it yourself in two commands — see
+[Building from source](#building-from-source).
+
 ## Why Mandeck
 
 Terminals became the primary IDE the moment coding agents moved into them.
@@ -48,9 +62,17 @@ all day.
   flushed on quit, and any schema migration backs up the previous file
   before touching it. A corrupted state file costs you one relaunch, never
   your layout.
-- **Utility rail** — a slim dock on the right with a terminal launcher and
-  a settings popover (font, shell, accent), with live-apply font changes
-  that never restart a shell.
+- **Command palette** — ⌘K fuzzy-jumps to any workspace or pane and runs
+  every app action from the keyboard. ⌘O opens any folder as a new pane
+  already cd'd there; ⌘/ shows the shortcut map.
+- **File-browser panes** — browse a directory inline as a first-class grid
+  citizen: navigate, open, reveal, or drop files straight into a terminal.
+- **Utility rail** — a slim dock on the right with a terminal launcher,
+  a files popover, and a settings popover (font, shell, accent, text
+  theme), with live-apply changes that never restart a shell.
+- **Text themes** — three curated terminal palettes (Bright, Soft, Warm)
+  so late-night sessions don't burn your eyes; every value audited at
+  4.5:1 contrast or better.
 - **Lightweight by principle** — no background daemon, no account, no AI
   bolted on. PTYs live only while the app runs; the renderer hosts xterm.js
   with the WebGL renderer.
@@ -59,12 +81,15 @@ all day.
 
 | Keys | Action |
 |---|---|
+| ⌘K | Command palette |
 | ⌘T | New workspace |
 | ⌘1–9 | Jump to workspace |
 | ⌘[ / ⌘] | Previous / next workspace |
 | ⌘⇧W | Close workspace |
 | ⌘N / ⌘D | New pane |
+| ⌘O | Open folder in a new pane |
 | ⌘W | Close pane (cascades to workspace, then window) |
+| ⌘/ | Keyboard shortcuts panel |
 | ⌘Q ⌘Q | Quit (double-press confirm) |
 
 Double-click a workspace chip to rename it. Drag chips to reorder. ⌘+click
@@ -83,8 +108,9 @@ npm run dev        # Vite + Electron with HMR
 npm run dist       # package release/mac-arm64/Mandeck.app
 ```
 
-The packaged build is unsigned; it is intended to be built and run on your
-own machine.
+The packaged build is unsigned and not notarized — Gatekeeper will balk at
+a downloaded copy until you clear the quarantine flag (see
+[Install](#install)). A build you produce on your own machine runs as-is.
 
 ## Architecture
 
@@ -116,9 +142,9 @@ classic `.icns` for older systems.
 
 ## Roadmap
 
-The next planned slice is a ⌘K command palette for fuzzy jumps across
-workspaces and panes, followed by a file-browser pane type for the utility
-rail and per-window state for true multi-window support.
+The ⌘K command palette and the file-browser pane type both shipped in
+0.1.x. Next up: per-window state for true multi-window support, a sysinfo
+widget for the utility rail, and signed + notarized release builds.
 
 ## License
 
