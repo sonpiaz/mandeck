@@ -1155,12 +1155,9 @@ function AppBody() {
             dragActive={draggingPane}
             settings={settings}
             focusedCwd={focusedCwd}
-            recentDirs={recentDirs}
             openSettingsSignal={settingsSignal}
             onNewTerminal={addPane}
-            onNewPaneAt={addPaneWithCwd}
             onOpenFilesAt={addFilesPane}
-            onChooseFilesFolder={chooseFilesFolder}
             onCommitSettings={commitSettings}
             onSetAccent={setActiveAccent}
             onShowShortcuts={openShortcuts}

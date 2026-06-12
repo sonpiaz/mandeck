@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SettingsPopover } from "./SettingsPopover";
-import { FilesPopover } from "./FilesPopover";
 import type { Settings } from "../electron/settings-schema.mjs";
 
 type Props = {
@@ -8,23 +7,17 @@ type Props = {
   dragActive: boolean;
   settings: Settings;
   focusedCwd?: string;
-  recentDirs: string[];
   // Bumped by the ⌘K palette's Settings action; each bump opens the popover.
   openSettingsSignal: number;
   onNewTerminal: () => void;
-  onNewPaneAt: (cwd?: string) => void;
-  // Files-pane launchers consumed by the files popover.
+  // Opens a file-browser pane directly (no intermediate popover).
   onOpenFilesAt: (dir?: string) => void;
-  onChooseFilesFolder: () => void;
   onCommitSettings: (next: Settings) => void;
   onSetAccent: (hue: string) => void;
   onShowShortcuts: () => void;
 };
 
-// One anchored popover at a time: opening either item dismisses the other.
-type RailPopover =
-  | { kind: "files"; right: number; top: number }
-  | { kind: "settings"; right: number; bottom: number };
+type RailPopover = { kind: "settings"; right: number; bottom: number };
 
 const IconTerminal = () => (
   <svg
@@ -78,26 +71,21 @@ const IconGear = () => (
 
 // 56px utility rail (SPEC C1): glass-1 chrome, a flex sibling of the
 // workspace area below the 44px titlebar. Launchers at top (terminal,
-// files), the settings gear bottom-pinned. The files item anchors the
-// file-pane launcher popover (header = browse the focused cwd in a files
-// pane; recents + Choose Folder… open files panes; Open Terminal Here keeps
-// the terminal-at-cwd flow).
+// files), the settings gear bottom-pinned. The files item opens a
+// file-browser pane at the focused pane's cwd in one click; recents and
+// Choose Folder… live in the ⌘K palette.
 export function UtilityRail({
   accent,
   dragActive,
   settings,
   focusedCwd,
-  recentDirs,
   openSettingsSignal,
   onNewTerminal,
-  onNewPaneAt,
   onOpenFilesAt,
-  onChooseFilesFolder,
   onCommitSettings,
   onSetAccent,
   onShowShortcuts,
 }: Props) {
-  const filesRef = useRef<HTMLButtonElement>(null);
   const gearRef = useRef<HTMLButtonElement>(null);
   const [popover, setPopover] = useState<RailPopover | null>(null);
 
@@ -122,21 +110,6 @@ export function UtilityRail({
       return;
     }
     openSettingsPopover();
-  };
-
-  const toggleFiles = () => {
-    if (popover?.kind === "files") {
-      setPopover(null);
-      return;
-    }
-    const rect = filesRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    // Anchored to the files item, opening down-and-left beside the rail.
-    setPopover({
-      kind: "files",
-      right: Math.round(window.innerWidth - rect.left + 8),
-      top: Math.max(8, Math.round(rect.top)),
-    });
   };
 
   // The mount-time signal value is skipped so re-showing the rail never
@@ -168,11 +141,9 @@ export function UtilityRail({
       </button>
       <button
         type="button"
-        ref={filesRef}
         className="rail-item"
-        title="Files"
-        aria-expanded={popover?.kind === "files"}
-        onClick={toggleFiles}
+        title="Browse files here"
+        onClick={() => onOpenFilesAt(focusedCwd)}
       >
         <IconFolder />
         <span className="rail-item-label">files</span>
@@ -189,19 +160,6 @@ export function UtilityRail({
         <IconGear />
         <span className="rail-item-label">settings</span>
       </button>
-      {popover?.kind === "files" && (
-        <FilesPopover
-          accent={accent}
-          position={popover}
-          anchorRef={filesRef}
-          focusedCwd={focusedCwd}
-          recentDirs={recentDirs}
-          onOpenFilesAt={onOpenFilesAt}
-          onChooseFilesFolder={onChooseFilesFolder}
-          onNewPaneAt={onNewPaneAt}
-          onClose={closePopover}
-        />
-      )}
       {popover?.kind === "settings" && (
         <SettingsPopover
           accent={accent}
