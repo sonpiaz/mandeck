@@ -9,6 +9,7 @@ const hostInfo = {
 type MenuChannel =
   | "menu:new-pane"
   | "menu:new-workspace"
+  | "menu:open-folder"
   | "menu:close-pane"
   | "menu:close-workspace"
   | "menu:prev-workspace"
@@ -37,6 +38,10 @@ const api = {
   },
 
   closeWindow: () => ipcRenderer.send("window:close"),
+
+  // Open Folder… (File menu / ⌘K palette): the main process owns the native
+  // directory picker; the chosen path feeds the cwd-threaded addPane variant.
+  pickFolder: (): Promise<string | null> => ipcRenderer.invoke("dialog:pick-folder"),
 
   onMenu: (channel: MenuChannel, cb: () => void) => {
     const listener = () => cb();

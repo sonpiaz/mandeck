@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   clipboard,
+  dialog,
   ipcMain,
   Menu,
   nativeTheme,
@@ -264,6 +265,11 @@ function buildMenu() {
           accelerator: "Cmd+D",
           click: () => sendToFocused("menu:new-pane"),
         },
+        {
+          label: "Open Folder…",
+          accelerator: "CmdOrCtrl+O",
+          click: () => sendToFocused("menu:open-folder"),
+        },
         { type: "separator" },
         {
           label: "Close Pane",
@@ -486,6 +492,18 @@ ipcMain.handle("drop:stage", (_e, srcPath: string): string => {
     console.error("[mandeck] drop:stage failed", err);
     return "";
   }
+});
+
+// Open Folder… directory picker. The menu route and the command palette both
+// fan into the renderer's single open-folder handler, which invokes this.
+ipcMain.handle("dialog:pick-folder", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return null;
+  const res = await dialog.showOpenDialog(win, {
+    title: "Open Folder",
+    properties: ["openDirectory"],
+  });
+  return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0];
 });
 
 ipcMain.handle("shell:openExternal", (_e, url: string) => {

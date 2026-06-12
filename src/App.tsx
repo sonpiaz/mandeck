@@ -105,8 +105,7 @@ function dropPaneCwds(
   return next;
 }
 
-function addPaneToWorkspace(ws: Workspace): Workspace {
-  const pid = newPid();
+function addPaneToWorkspace(ws: Workspace, pid: string): Workspace {
   let nextCols: Col[];
   if (ws.cols.length < MAX_COLS) {
     nextCols = [...ws.cols, { cid: newCid(), panes: [pid] }];
@@ -367,7 +366,34 @@ function AppBody() {
     }));
   };
 
-  const addPane = () => updateActiveWorkspace(addPaneToWorkspace);
+  // The cwd variant backs Open Folder… (menu + palette): the chosen path is
+  // registered in paneCwds BEFORE the pane mounts, so the PTY spawns there
+  // and the header title / workspace auto-naming resolve without waiting for
+  // the first OSC 7 report.
+  const addPaneWithCwd = (cwd?: string) => {
+    setState((s) => {
+      const ws = s.workspaces.find((w) => w.id === s.activeWorkspaceId);
+      if (!ws) return s;
+      const pid = newPid();
+      let next = addPaneToWorkspace(ws, pid);
+      if (cwd && next.autoNamed) next = { ...next, title: basenameOf(cwd) };
+      return {
+        ...s,
+        workspaces: s.workspaces.map((w) =>
+          w.id === s.activeWorkspaceId ? next : w
+        ),
+        paneCwds: cwd ? { ...s.paneCwds, [pid]: cwd } : s.paneCwds,
+      };
+    });
+  };
+
+  const addPane = () => addPaneWithCwd();
+
+  const openFolderInNewPane = () => {
+    void window.mandeck.pickFolder().then((dir) => {
+      if (dir) addPaneWithCwd(dir);
+    });
+  };
 
   const addWorkspace = () => {
     setState((s) => {
@@ -540,6 +566,7 @@ function AppBody() {
     const offs = [
       window.mandeck.onMenu("menu:new-pane", addPane),
       window.mandeck.onMenu("menu:new-workspace", addWorkspace),
+      window.mandeck.onMenu("menu:open-folder", openFolderInNewPane),
       window.mandeck.onMenu("menu:close-pane", closePane),
       window.mandeck.onMenu("menu:close-workspace", () => closeWorkspace()),
       window.mandeck.onMenu("menu:prev-workspace", () => cycleWorkspace(-1)),
