@@ -1,16 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SettingsPopover } from "./SettingsPopover";
+import { FilesPopover } from "./FilesPopover";
 import type { Settings } from "../electron/settings-schema.mjs";
 
 type Props = {
   accent: string;
   dragActive: boolean;
   settings: Settings;
+  focusedCwd?: string;
+  recentDirs: string[];
   // Bumped by the ⌘K palette's Settings action; each bump opens the popover.
   openSettingsSignal: number;
   onNewTerminal: () => void;
+  onNewPaneAt: (cwd?: string) => void;
+  onChooseFolder: () => void;
   onCommitSettings: (next: Settings) => void;
 };
+
+// One anchored popover at a time: opening either item dismisses the other.
+type RailPopover =
+  | { kind: "files"; right: number; top: number }
+  | { kind: "settings"; right: number; bottom: number };
 
 const IconTerminal = () => (
   <svg
@@ -27,6 +37,22 @@ const IconTerminal = () => (
     <rect x="2" y="3.25" width="16" height="13.5" rx="2.5" />
     <path d="M5.5 8l2.8 2-2.8 2" />
     <path d="M10.5 12h4" />
+  </svg>
+);
+
+const IconFolder = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.4"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden
+  >
+    <path d="M2.1 5.7a2.1 2.1 0 012.1-2.1h3.2l2.3 2.1H15.8a2.1 2.1 0 012.1 2.1v6.4a2.1 2.1 0 01-2.1 2.1H4.2a2.1 2.1 0 01-2.1-2.1V5.7z" />
   </svg>
 );
 
@@ -47,42 +73,60 @@ const IconGear = () => (
 );
 
 // 56px utility rail (SPEC C1): glass-1 chrome, a flex sibling of the
-// workspace area below the 44px titlebar. Exactly two items in v1 — the
-// terminal launcher (top) and the settings gear (bottom-pinned).
+// workspace area below the 44px titlebar. Launchers at top (terminal,
+// files), the settings gear bottom-pinned.
 export function UtilityRail({
   accent,
   dragActive,
   settings,
+  focusedCwd,
+  recentDirs,
   openSettingsSignal,
   onNewTerminal,
+  onNewPaneAt,
+  onChooseFolder,
   onCommitSettings,
 }: Props) {
+  const filesRef = useRef<HTMLButtonElement>(null);
   const gearRef = useRef<HTMLButtonElement>(null);
-  const [popoverPos, setPopoverPos] = useState<{
-    right: number;
-    bottom: number;
-  } | null>(null);
+  const [popover, setPopover] = useState<RailPopover | null>(null);
 
-  const closePopover = useCallback(() => setPopoverPos(null), []);
+  const closePopover = useCallback(() => setPopover(null), []);
 
-  const openPopover = useCallback(() => {
+  const openSettingsPopover = useCallback(() => {
     const rect = gearRef.current?.getBoundingClientRect();
     if (!rect) return;
     // Anchored to the gear, opening up-and-left from the bottom-right corner
     // (C3). The gear is bottom-pinned, so the offsets stay valid across
     // window resizes.
-    setPopoverPos({
+    setPopover({
+      kind: "settings",
       right: Math.max(8, Math.round(window.innerWidth - rect.right + 4)),
       bottom: Math.round(window.innerHeight - rect.top + 8),
     });
   }, []);
 
-  const togglePopover = () => {
-    if (popoverPos) {
-      setPopoverPos(null);
+  const toggleSettings = () => {
+    if (popover?.kind === "settings") {
+      setPopover(null);
       return;
     }
-    openPopover();
+    openSettingsPopover();
+  };
+
+  const toggleFiles = () => {
+    if (popover?.kind === "files") {
+      setPopover(null);
+      return;
+    }
+    const rect = filesRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    // Anchored to the files item, opening down-and-left beside the rail.
+    setPopover({
+      kind: "files",
+      right: Math.round(window.innerWidth - rect.left + 8),
+      top: Math.max(8, Math.round(rect.top)),
+    });
   };
 
   // The mount-time signal value is skipped so re-showing the rail never
@@ -91,14 +135,14 @@ export function UtilityRail({
   useEffect(() => {
     if (openSettingsSignal === lastSignalRef.current) return;
     lastSignalRef.current = openSettingsSignal;
-    openPopover();
-  }, [openSettingsSignal, openPopover]);
+    openSettingsPopover();
+  }, [openSettingsSignal, openSettingsPopover]);
 
   // A pane drag starting dismisses the popover (C3 dismissal list); the rail
   // itself goes pointer-inert via CSS for the drag's duration (C1). Hiding
   // the rail unmounts this component, taking the popover with its anchor.
   useEffect(() => {
-    if (dragActive) setPopoverPos(null);
+    if (dragActive) setPopover(null);
   }, [dragActive]);
 
   return (
@@ -112,22 +156,45 @@ export function UtilityRail({
         <IconTerminal />
         <span className="rail-item-label">terminal</span>
       </button>
+      <button
+        type="button"
+        ref={filesRef}
+        className="rail-item"
+        title="Files"
+        aria-expanded={popover?.kind === "files"}
+        onClick={toggleFiles}
+      >
+        <IconFolder />
+        <span className="rail-item-label">files</span>
+      </button>
       <div className="rail-stretch" />
       <button
         type="button"
         ref={gearRef}
         className="rail-item"
         title="Settings"
-        aria-expanded={popoverPos !== null}
-        onClick={togglePopover}
+        aria-expanded={popover?.kind === "settings"}
+        onClick={toggleSettings}
       >
         <IconGear />
         <span className="rail-item-label">settings</span>
       </button>
-      {popoverPos && (
+      {popover?.kind === "files" && (
+        <FilesPopover
+          accent={accent}
+          position={popover}
+          anchorRef={filesRef}
+          focusedCwd={focusedCwd}
+          recentDirs={recentDirs}
+          onNewPaneAt={onNewPaneAt}
+          onChooseFolder={onChooseFolder}
+          onClose={closePopover}
+        />
+      )}
+      {popover?.kind === "settings" && (
         <SettingsPopover
           accent={accent}
-          position={popoverPos}
+          position={popover}
           settings={settings}
           anchorRef={gearRef}
           onCommit={onCommitSettings}

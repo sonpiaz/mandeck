@@ -200,6 +200,23 @@ function closePaneInWorkspace(ws: Workspace, victim: string): Workspace | null {
   };
 }
 
+// Files popover recents: unique cwds from the newest panes first (pane ids
+// are monotonic), skipping the focused pane's own directory.
+function recentDirsFrom(
+  paneCwds: Record<string, string>,
+  skip?: string
+): string[] {
+  const out: string[] = [];
+  const pids = Object.keys(paneCwds).sort((a, b) => paneAge(b) - paneAge(a));
+  for (const pid of pids) {
+    const dir = paneCwds[pid];
+    if (dir === skip || out.includes(dir)) continue;
+    out.push(dir);
+    if (out.length === 6) break;
+  }
+  return out;
+}
+
 const buildPayload = (s: AppState): PersistedState => ({
   version: PERSIST_VERSION,
   workspaces: s.workspaces,
@@ -664,12 +681,17 @@ function AppBody() {
     autoNamed: w.autoNamed,
   }));
 
+  // Shared by the ⌘K reveal action and the rail's files popover.
+  const focusedCwd = activeWorkspace
+    ? state.paneCwds[activeWorkspace.focusedPaneId]
+    : undefined;
+  const recentDirs = recentDirsFrom(state.paneCwds, focusedCwd);
+
   // ⌘K action list, rebuilt from live state on every palette render so
   // subtitles (pane landing spot, cwd, rail visibility) stay current.
   const buildPaletteActions = (): PaletteAction[] => {
     const ws = activeWorkspace;
     const home = window.mandeck.homeDir;
-    const focusedCwd = ws ? state.paneCwds[ws.focusedPaneId] : undefined;
     const actions: PaletteAction[] = [
       {
         id: "new-pane",
@@ -814,8 +836,12 @@ function AppBody() {
             accent={activeAccent}
             dragActive={draggingPane}
             settings={settings}
+            focusedCwd={focusedCwd}
+            recentDirs={recentDirs}
             openSettingsSignal={settingsSignal}
             onNewTerminal={addPane}
+            onNewPaneAt={addPaneWithCwd}
+            onChooseFolder={openFolderInNewPane}
             onCommitSettings={commitSettings}
           />
         )}
